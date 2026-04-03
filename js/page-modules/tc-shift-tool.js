@@ -8,22 +8,30 @@ const tcShiftToolState = {
     angle: true,
     yShift: true,
     xShift: true
-  }
+  },
+  chartMode: "all-angle",
+  chartAngle: "22.5",
+  chartShowY: true,
+  chartShowX: true
 };
 
 function initTcShiftToolPage() {
   const root = document.getElementById("tcShiftToolRoot");
   if (!root) return;
 
-  tcShiftToolState.allRows = [];
-  tcShiftToolState.currentPage = 1;
-  tcShiftToolState.visibleColumns = {
-    date: true,
-    time: true,
-    angle: true,
-    yShift: true,
-    xShift: true
-  };
+    tcShiftToolState.allRows = [];
+    tcShiftToolState.currentPage = 1;
+    tcShiftToolState.visibleColumns = {
+      date: true,
+      time: true,
+      angle: true,
+      yShift: true,
+      xShift: true
+    };
+    tcShiftToolState.chartMode = "all-angle";
+    tcShiftToolState.chartAngle = "22.5";
+    tcShiftToolState.chartShowY = true;
+    tcShiftToolState.chartShowX = true;
 
   root.innerHTML = `
     <div class="tool-block">
@@ -333,6 +341,7 @@ function renderTcShiftTableAndSummary() {
 
   wrap.innerHTML = `
     ${buildTcShiftTableHtml(pageRows)}
+
     <div class="table-pagination">
       <button id="tcPrevPageBtn" class="tool-btn pagination-btn" ${currentPage <= 1 ? "disabled" : ""}>上一页</button>
 
@@ -351,9 +360,13 @@ function renderTcShiftTableAndSummary() {
 
       <button id="tcNextPageBtn" class="tool-btn pagination-btn" ${currentPage >= totalPages ? "disabled" : ""}>下一页</button>
     </div>
+
+    ${buildTcShiftChartSectionHtml()}
   `;
 
   bindPaginationEvents(totalPages);
+  bindChartEvents();
+  drawTcShiftChart();
 }
 
 function buildTcShiftTableHtml(rows) {
@@ -778,4 +791,314 @@ function bindOffsetCalculator(stats) {
 function formatStat(value) {
   if (value === null || value === undefined) return "--";
   return formatNumber(value, 6);
+}
+
+function buildTcShiftChartSectionHtml() {
+  return `
+    <section class="chart-section-card">
+      <div class="chart-toolbar">
+        <div class="chart-toolbar-left">
+          <label class="chart-control">
+            <span>图表模式</span>
+            <select id="chartModeSelect" class="chart-select">
+              <option value="all-angle" ${tcShiftToolState.chartMode === "all-angle" ? "selected" : ""}>全角度散点图</option>
+              <option value="single-angle" ${tcShiftToolState.chartMode === "single-angle" ? "selected" : ""}>单角度时间图</option>
+            </select>
+          </label>
+
+          <label class="chart-control" id="chartAngleControl" ${tcShiftToolState.chartMode === "single-angle" ? "" : 'style="display:none;"'}>
+            <span>角度</span>
+            <select id="chartAngleSelect" class="chart-select">
+              ${[0, 22.5, 45, 67.5, 90, 112.5, 135, 157.5, 180]
+                .map(
+                  (angle) =>
+                    `<option value="${angle}" ${String(angle) === String(tcShiftToolState.chartAngle) ? "selected" : ""}>${angle}°</option>`
+                )
+                .join("")}
+            </select>
+          </label>
+        </div>
+
+        <div class="chart-toolbar-right">
+          <label class="chart-check-item">
+            <input id="chartShowY" type="checkbox" ${tcShiftToolState.chartShowY ? "checked" : ""} />
+            <span>Y shift</span>
+          </label>
+          <label class="chart-check-item">
+            <input id="chartShowX" type="checkbox" ${tcShiftToolState.chartShowX ? "checked" : ""} />
+            <span>X shift</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="chart-legend">
+        <span class="legend-item">
+          <span class="legend-dot legend-dot-y"></span>Y shift
+        </span>
+        <span class="legend-item">
+          <span class="legend-dot legend-dot-x"></span>X shift
+        </span>
+      </div>
+
+      <div class="chart-canvas-wrap">
+        <canvas id="tcShiftChartCanvas" width="900" height="420"></canvas>
+      </div>
+    </section>
+  `;
+}
+
+function bindChartEvents() {
+  const modeSelect = document.getElementById("chartModeSelect");
+  const angleSelect = document.getElementById("chartAngleSelect");
+  const showY = document.getElementById("chartShowY");
+  const showX = document.getElementById("chartShowX");
+
+  if (modeSelect) {
+    modeSelect.addEventListener("change", () => {
+      tcShiftToolState.chartMode = modeSelect.value;
+
+      const angleControl = document.getElementById("chartAngleControl");
+      if (angleControl) {
+        angleControl.style.display =
+          tcShiftToolState.chartMode === "single-angle" ? "" : "none";
+      }
+
+      drawTcShiftChart();
+    });
+  }
+
+  if (angleSelect) {
+    angleSelect.addEventListener("change", () => {
+      tcShiftToolState.chartAngle = angleSelect.value;
+      drawTcShiftChart();
+    });
+  }
+
+  if (showY) {
+    showY.addEventListener("change", () => {
+      tcShiftToolState.chartShowY = showY.checked;
+      drawTcShiftChart();
+    });
+  }
+
+  if (showX) {
+    showX.addEventListener("change", () => {
+      tcShiftToolState.chartShowX = showX.checked;
+      drawTcShiftChart();
+    });
+  }
+}
+
+function drawTcShiftChart() {
+  const canvas = document.getElementById("tcShiftChartCanvas");
+  if (!canvas) return;
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  const rows = tcShiftToolState.allRows || [];
+  const width = canvas.width;
+  const height = canvas.height;
+
+  ctx.clearRect(0, 0, width, height);
+
+  if (!rows.length) {
+    ctx.fillStyle = "#777";
+    ctx.font = "16px Segoe UI";
+    ctx.fillText("暂无数据可绘图", 30, 40);
+    return;
+  }
+
+  const padding = { left: 70, right: 30, top: 30, bottom: 55 };
+  const plotWidth = width - padding.left - padding.right;
+  const plotHeight = height - padding.top - padding.bottom;
+
+  let dataY = [];
+  let dataX = [];
+  let xValues = [];
+  let xLabelFormatter = (v) => String(v);
+
+  if (tcShiftToolState.chartMode === "all-angle") {
+    const filtered = rows.filter((row) => row.angle !== "" && row.angle !== null);
+
+    dataY = filtered
+      .filter((row) => row.yShift !== "")
+      .map((row) => ({ x: Number(row.angle), y: Number(row.yShift) }));
+
+    dataX = filtered
+      .filter((row) => row.xShift !== "")
+      .map((row) => ({ x: Number(row.angle), y: Number(row.xShift) }));
+
+    xValues = filtered.map((row) => Number(row.angle));
+    xLabelFormatter = (v) => `${v}°`;
+  } else {
+    const targetAngle = Number(tcShiftToolState.chartAngle);
+    const filtered = rows.filter((row) => Number(row.angle) === targetAngle);
+
+    dataY = filtered
+      .filter((row) => row.yShift !== "")
+      .map((row, index) => ({ x: index + 1, y: Number(row.yShift), time: row.time }));
+
+    dataX = filtered
+      .filter((row) => row.xShift !== "")
+      .map((row, index) => ({ x: index + 1, y: Number(row.xShift), time: row.time }));
+
+    xValues = filtered.map((_, index) => index + 1);
+    xLabelFormatter = (v) => `#${v}`;
+  }
+
+  const combined = [];
+  if (tcShiftToolState.chartShowY) combined.push(...dataY);
+  if (tcShiftToolState.chartShowX) combined.push(...dataX);
+
+  if (!combined.length) {
+    ctx.fillStyle = "#777";
+    ctx.font = "16px Segoe UI";
+    ctx.fillText("当前图表没有可显示的数据", 30, 40);
+    return;
+  }
+
+  const minX = Math.min(...combined.map((p) => p.x));
+  const maxX = Math.max(...combined.map((p) => p.x));
+  let minY = Math.min(...combined.map((p) => p.y));
+  let maxY = Math.max(...combined.map((p) => p.y));
+
+  if (minY === maxY) {
+    minY -= 1;
+    maxY += 1;
+  }
+
+  const yPadding = (maxY - minY) * 0.15;
+  minY -= yPadding;
+  maxY += yPadding;
+
+  function mapX(value) {
+    if (maxX === minX) return padding.left + plotWidth / 2;
+    return padding.left + ((value - minX) / (maxX - minX)) * plotWidth;
+  }
+
+  function mapY(value) {
+    return padding.top + (1 - (value - minY) / (maxY - minY)) * plotHeight;
+  }
+
+  drawChartGrid(ctx, padding, plotWidth, plotHeight, minX, maxX, minY, maxY, xLabelFormatter);
+
+  if (tcShiftToolState.chartShowY) {
+    drawSeries(ctx, dataY, mapX, mapY, "#f59e0b", tcShiftToolState.chartMode === "single-angle");
+  }
+
+  if (tcShiftToolState.chartShowX) {
+    drawSeries(ctx, dataX, mapX, mapY, "#3b82f6", tcShiftToolState.chartMode === "single-angle");
+  }
+
+  drawChartAxes(ctx, padding, plotWidth, plotHeight);
+
+  ctx.fillStyle = "#555";
+  ctx.font = "13px Segoe UI";
+  ctx.fillText(
+    tcShiftToolState.chartMode === "all-angle" ? "Angle" : "Time Sequence",
+    padding.left + plotWidth / 2 - 30,
+    height - 16
+  );
+
+  ctx.save();
+  ctx.translate(18, padding.top + plotHeight / 2 + 20);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText("Shift", 0, 0);
+  ctx.restore();
+}
+
+function drawChartGrid(ctx, padding, plotWidth, plotHeight, minX, maxX, minY, maxY, xLabelFormatter) {
+  ctx.save();
+
+  ctx.strokeStyle = "rgba(0,0,0,0.10)";
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 4]);
+
+  const verticalLines = 6;
+  const horizontalLines = 6;
+
+  for (let i = 0; i <= verticalLines; i++) {
+    const x = padding.left + (i / verticalLines) * plotWidth;
+    ctx.beginPath();
+    ctx.moveTo(x, padding.top);
+    ctx.lineTo(x, padding.top + plotHeight);
+    ctx.stroke();
+
+    const value = minX + (i / verticalLines) * (maxX - minX);
+    ctx.setLineDash([]);
+    ctx.fillStyle = "#888";
+    ctx.font = "12px Segoe UI";
+    ctx.textAlign = "center";
+    ctx.fillText(xLabelFormatter(roundForAxis(value)), x, padding.top + plotHeight + 22);
+    ctx.setLineDash([4, 4]);
+  }
+
+  for (let i = 0; i <= horizontalLines; i++) {
+    const y = padding.top + (i / horizontalLines) * plotHeight;
+    ctx.beginPath();
+    ctx.moveTo(padding.left, y);
+    ctx.lineTo(padding.left + plotWidth, y);
+    ctx.stroke();
+
+    const value = maxY - (i / horizontalLines) * (maxY - minY);
+    ctx.setLineDash([]);
+    ctx.fillStyle = "#888";
+    ctx.font = "12px Segoe UI";
+    ctx.textAlign = "right";
+    ctx.fillText(roundForAxis(value), padding.left - 10, y + 4);
+    ctx.setLineDash([4, 4]);
+  }
+
+  ctx.restore();
+}
+
+function drawChartAxes(ctx, padding, plotWidth, plotHeight) {
+  ctx.save();
+  ctx.strokeStyle = "rgba(0,0,0,0.22)";
+  ctx.lineWidth = 1.2;
+  ctx.setLineDash([]);
+
+  ctx.beginPath();
+  ctx.moveTo(padding.left, padding.top);
+  ctx.lineTo(padding.left, padding.top + plotHeight);
+  ctx.lineTo(padding.left + plotWidth, padding.top + plotHeight);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawSeries(ctx, data, mapX, mapY, color, connectLine) {
+  if (!data.length) return;
+
+  ctx.save();
+
+  if (connectLine && data.length > 1) {
+    ctx.beginPath();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    data.forEach((point, index) => {
+      const x = mapX(point.x);
+      const y = mapY(point.y);
+      if (index === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+  }
+
+  data.forEach((point) => {
+    const x = mapX(point.x);
+    const y = mapY(point.y);
+
+    ctx.beginPath();
+    ctx.fillStyle = color;
+    ctx.arc(x, y, 5, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  ctx.restore();
+}
+
+function roundForAxis(value) {
+  return Number(value).toFixed(2);
 }
