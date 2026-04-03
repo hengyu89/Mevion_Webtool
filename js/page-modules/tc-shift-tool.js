@@ -1,6 +1,29 @@
+const tcShiftToolState = {
+  allRows: [],
+  currentPage: 1,
+  pageSize: 15,
+  visibleColumns: {
+    date: true,
+    time: true,
+    angle: true,
+    yShift: true,
+    xShift: true
+  }
+};
+
 function initTcShiftToolPage() {
   const root = document.getElementById("tcShiftToolRoot");
   if (!root) return;
+
+  tcShiftToolState.allRows = [];
+  tcShiftToolState.currentPage = 1;
+  tcShiftToolState.visibleColumns = {
+    date: true,
+    time: true,
+    angle: true,
+    yShift: true,
+    xShift: true
+  };
 
   root.innerHTML = `
     <div class="tool-block">
@@ -228,75 +251,220 @@ function buildShiftRows(angleEvents, shiftEvents) {
 }
 
 function findLatestAngleBeforeShift(angleEvents, shiftTimeMs) {
-  let latest = null;
+  let left = 0;
+  let right = angleEvents.length - 1;
+  let answer = null;
 
-  for (const angle of angleEvents) {
-    if (angle.tcTimeMs <= shiftTimeMs) {
-      latest = angle;
+  while (left <= right) {
+    const mid = Math.floor((left + right) / 2);
+    const current = angleEvents[mid];
+
+    if (current.tcTimeMs <= shiftTimeMs) {
+      answer = current;
+      left = mid + 1;
     } else {
-      break;
+      right = mid - 1;
     }
   }
 
-  return latest;
+  return answer;
 }
 
 function renderTcShiftResults(rows) {
+  tcShiftToolState.allRows = rows;
+  tcShiftToolState.currentPage = 1;
+
+  const stats = calculateShiftStats(rows);
+  renderTcShiftStatsToSide(stats);
+  renderTcShiftTableAndSummary();
+}
+
+function renderTcShiftTableAndSummary() {
   const summary = document.getElementById("tcSummary");
   const wrap = document.getElementById("tcResultTableWrap");
   if (!summary || !wrap) return;
 
-  const stats = calculateShiftStats(rows);
-  renderTcShiftStatsToSide(stats);
+  const rows = tcShiftToolState.allRows;
+  const pageSize = tcShiftToolState.pageSize;
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+  const currentPage = Math.min(tcShiftToolState.currentPage, totalPages);
+  tcShiftToolState.currentPage = currentPage;
 
   summary.innerHTML = `
-    <div class="summary-card">
-      <div><strong>结果行数：</strong>${rows.length}</div>
+    <div class="summary-row">
+      <div class="summary-card">
+        <div><strong>结果行数：</strong>${rows.length}</div>
+      </div>
+
+      <div class="column-toggle-panel">
+        <label class="column-toggle-item">
+          <input type="checkbox" data-col="date" ${tcShiftToolState.visibleColumns.date ? "checked" : ""}>
+          <span>Date</span>
+        </label>
+        <label class="column-toggle-item">
+          <input type="checkbox" data-col="time" ${tcShiftToolState.visibleColumns.time ? "checked" : ""}>
+          <span>Time</span>
+        </label>
+        <label class="column-toggle-item">
+          <input type="checkbox" data-col="angle" ${tcShiftToolState.visibleColumns.angle ? "checked" : ""}>
+          <span>Angle</span>
+        </label>
+        <label class="column-toggle-item">
+          <input type="checkbox" data-col="yShift" ${tcShiftToolState.visibleColumns.yShift ? "checked" : ""}>
+          <span>Y shift</span>
+        </label>
+        <label class="column-toggle-item">
+          <input type="checkbox" data-col="xShift" ${tcShiftToolState.visibleColumns.xShift ? "checked" : ""}>
+          <span>X shift</span>
+        </label>
+      </div>
     </div>
   `;
+
+  bindColumnToggleEvents();
 
   if (!rows.length) {
     wrap.innerHTML = `<div class="empty-text">没有解析到符合条件的数据。</div>`;
     return;
   }
 
+  const startIndex = (currentPage - 1) * pageSize;
+  const pageRows = rows.slice(startIndex, startIndex + pageSize);
+
   wrap.innerHTML = `
-    <table class="tool-table">
+    ${buildTcShiftTableHtml(pageRows)}
+    <div class="table-pagination">
+      <button id="tcPrevPageBtn" class="tool-btn pagination-btn" ${currentPage <= 1 ? "disabled" : ""}>上一页</button>
+
+      <div class="pagination-info">
+        第
+        <input
+          id="tcPageInput"
+          class="page-jump-input"
+          type="number"
+          min="1"
+          max="${totalPages}"
+          value="${currentPage}"
+        />
+        / ${totalPages} 页
+      </div>
+
+      <button id="tcNextPageBtn" class="tool-btn pagination-btn" ${currentPage >= totalPages ? "disabled" : ""}>下一页</button>
+    </div>
+  `;
+
+  bindPaginationEvents(totalPages);
+}
+
+function buildTcShiftTableHtml(rows) {
+  const visible = tcShiftToolState.visibleColumns;
+
+  const headers = [];
+  if (visible.date) headers.push(`<th>Date</th>`);
+  if (visible.time) headers.push(`<th>Time</th>`);
+  if (visible.angle) headers.push(`<th>Angle</th>`);
+  if (visible.yShift) headers.push(`<th>Y shift</th>`);
+  if (visible.xShift) headers.push(`<th>X shift</th>`);
+
+  const bodyRows = rows
+    .map((row) => {
+      const yDanger =
+        row.yShift !== "" && (Number(row.yShift) < -2 || Number(row.yShift) > 2);
+      const xDanger =
+        row.xShift !== "" && (Number(row.xShift) < -2 || Number(row.xShift) > 2);
+
+      const cells = [];
+      if (visible.date) cells.push(`<td class="muted-cell">${escapeHtml(row.date)}</td>`);
+      if (visible.time) cells.push(`<td class="muted-cell">${escapeHtml(row.time)}</td>`);
+      if (visible.angle) cells.push(`<td class="muted-cell">${formatNumber(row.angle)}</td>`);
+      if (visible.yShift) {
+        cells.push(`
+          <td class="shift-cell ${yDanger ? "shift-danger" : ""}">
+            ${row.yShift === "" ? "" : formatNumber(row.yShift, 6)}
+          </td>
+        `);
+      }
+      if (visible.xShift) {
+        cells.push(`
+          <td class="shift-cell ${xDanger ? "shift-danger" : ""}">
+            ${row.xShift === "" ? "" : formatNumber(row.xShift, 6)}
+          </td>
+        `);
+      }
+
+      return `<tr>${cells.join("")}</tr>`;
+    })
+    .join("");
+
+  return `
+    <table class="tool-table dynamic-table">
       <thead>
-        <tr>
-          <th>Date</th>
-          <th>Time</th>
-          <th>Angle</th>
-          <th>Y shift</th>
-          <th>X shift</th>
-        </tr>
+        <tr>${headers.join("")}</tr>
       </thead>
       <tbody>
-        ${rows
-          .map((row) => {
-            const yDanger =
-              row.yShift !== "" && (Number(row.yShift) < -2 || Number(row.yShift) > 2);
-            const xDanger =
-              row.xShift !== "" && (Number(row.xShift) < -2 || Number(row.xShift) > 2);
-
-            return `
-              <tr>
-                <td class="muted-cell">${escapeHtml(row.date)}</td>
-                <td class="muted-cell">${escapeHtml(row.time)}</td>
-                <td class="muted-cell">${formatNumber(row.angle)}</td>
-                <td class="shift-cell ${yDanger ? "shift-danger" : ""}">
-                  ${row.yShift === "" ? "" : formatNumber(row.yShift, 6)}
-                </td>
-                <td class="shift-cell ${xDanger ? "shift-danger" : ""}">
-                  ${row.xShift === "" ? "" : formatNumber(row.xShift, 6)}
-                </td>
-              </tr>
-            `;
-          })
-          .join("")}
+        ${bodyRows}
       </tbody>
     </table>
   `;
+}
+
+function bindPaginationEvents(totalPages) {
+  const prevBtn = document.getElementById("tcPrevPageBtn");
+  const nextBtn = document.getElementById("tcNextPageBtn");
+  const pageInput = document.getElementById("tcPageInput");
+
+  if (prevBtn) {
+    prevBtn.addEventListener("click", () => {
+      if (tcShiftToolState.currentPage > 1) {
+        tcShiftToolState.currentPage -= 1;
+        renderTcShiftTableAndSummary();
+      }
+    });
+  }
+
+  if (nextBtn) {
+    nextBtn.addEventListener("click", () => {
+      if (tcShiftToolState.currentPage < totalPages) {
+        tcShiftToolState.currentPage += 1;
+        renderTcShiftTableAndSummary();
+      }
+    });
+  }
+
+  if (pageInput) {
+    function jumpToPage() {
+      let page = Number(pageInput.value);
+      if (Number.isNaN(page)) {
+        pageInput.value = tcShiftToolState.currentPage;
+        return;
+      }
+
+      if (page < 1) page = 1;
+      if (page > totalPages) page = totalPages;
+
+      tcShiftToolState.currentPage = page;
+      renderTcShiftTableAndSummary();
+    }
+
+    pageInput.addEventListener("change", jumpToPage);
+
+    pageInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        jumpToPage();
+      }
+    });
+  }
+}
+
+function bindColumnToggleEvents() {
+  const checkboxes = document.querySelectorAll(".column-toggle-item input[type='checkbox']");
+  checkboxes.forEach((checkbox) => {
+    checkbox.addEventListener("change", (event) => {
+      const col = event.target.dataset.col;
+      tcShiftToolState.visibleColumns[col] = event.target.checked;
+      renderTcShiftTableAndSummary();
+    });
+  });
 }
 
 function parseCsvText(text, fileName) {
@@ -453,58 +621,84 @@ function renderTcShiftStatsToSide(stats) {
       </div>
     </section>
 
-    <section class="card side-card">
+    <section class="card side-card stats-section-card">
       <h3 class="side-card-title">Shift 统计</h3>
       <div class="side-stats-grid">
         <div class="mini-stat-card">
-          <div class="mini-stat-label">Y max</div>
-          <div class="mini-stat-value">${formatStat(stats.yMax)}</div>
-        </div>
-        <div class="mini-stat-card">
-          <div class="mini-stat-label">Y min</div>
+          <div class="mini-stat-label">Y (CP) min</div>
           <div class="mini-stat-value">${formatStat(stats.yMin)}</div>
         </div>
         <div class="mini-stat-card">
-          <div class="mini-stat-label">Y max-min</div>
-          <div class="mini-stat-value">${formatStat(stats.yRange)}</div>
+          <div class="mini-stat-label">Y (CP) max</div>
+          <div class="mini-stat-value">${formatStat(stats.yMax)}</div>
         </div>
+
         <div class="mini-stat-card">
-          <div class="mini-stat-label">X max</div>
-          <div class="mini-stat-value">${formatStat(stats.xMax)}</div>
-        </div>
-        <div class="mini-stat-card">
-          <div class="mini-stat-label">X min</div>
+          <div class="mini-stat-label">X (IP) min</div>
           <div class="mini-stat-value">${formatStat(stats.xMin)}</div>
         </div>
         <div class="mini-stat-card">
-          <div class="mini-stat-label">X max-min</div>
+          <div class="mini-stat-label">X (IP) max</div>
+          <div class="mini-stat-value">${formatStat(stats.xMax)}</div>
+        </div>
+
+        <div class="mini-stat-card">
+          <div class="mini-stat-label">Y max - min</div>
+          <div class="mini-stat-value">${formatStat(stats.yRange)}</div>
+        </div>
+        <div class="mini-stat-card">
+          <div class="mini-stat-label">X max - min</div>
           <div class="mini-stat-value">${formatStat(stats.xRange)}</div>
         </div>
       </div>
     </section>
 
-    <section class="card side-card">
+    <section class="card side-card offset-section-card">
       <h3 class="side-card-title">Offset 计算</h3>
 
-      <div class="calc-form-grid">
+      <div class="calc-form-grid single-col">
         <label class="calc-field">
-          <span>Y slope</span>
-          <input id="ySlopeInput" type="number" step="any" class="calc-input" placeholder="输入 Y slope" />
+          <span>Y (CP) slope</span>
+          <input
+            id="ySlopeInput"
+            type="number"
+            step="any"
+            class="calc-input compact-input narrow-input"
+            value="239.85"
+          />
         </label>
 
         <label class="calc-field">
-          <span>Y offset</span>
-          <input id="yOffsetInput" type="number" step="any" class="calc-input" placeholder="输入 Y offset" />
+          <span>Y (CP) offset</span>
+          <input
+            id="yOffsetInput"
+            type="number"
+            step="any"
+            class="calc-input compact-input narrow-input"
+            value="31331"
+          />
         </label>
 
         <label class="calc-field">
-          <span>X slope</span>
-          <input id="xSlopeInput" type="number" step="any" class="calc-input" placeholder="输入 X slope" />
+          <span>X (IP) slope</span>
+          <input
+            id="xSlopeInput"
+            type="number"
+            step="any"
+            class="calc-input compact-input narrow-input"
+            value="292.07"
+          />
         </label>
 
         <label class="calc-field">
-          <span>X offset</span>
-          <input id="xOffsetInput" type="number" step="any" class="calc-input" placeholder="输入 X offset" />
+          <span>X (IP) offset</span>
+          <input
+            id="xOffsetInput"
+            type="number"
+            step="any"
+            class="calc-input compact-input narrow-input"
+            value="33077"
+          />
         </label>
       </div>
 
@@ -556,7 +750,7 @@ function bindOffsetCalculator(stats) {
       stats.yMin !== null
     ) {
       const yNewOffset = ((stats.yMax + stats.yMin) / 2) * ySlope + yOffset;
-      yNewOffsetOutput.textContent = formatNumber(yNewOffset, 6);
+      yNewOffsetOutput.textContent = formatNumber(yNewOffset, 2);
     } else {
       yNewOffsetOutput.textContent = "--";
     }
@@ -568,7 +762,7 @@ function bindOffsetCalculator(stats) {
       stats.xMin !== null
     ) {
       const xNewOffset = ((stats.xMax + stats.xMin) / 2) * xSlope + xOffset;
-      xNewOffsetOutput.textContent = formatNumber(xNewOffset, 6);
+      xNewOffsetOutput.textContent = formatNumber(xNewOffset, 2);
     } else {
       xNewOffsetOutput.textContent = "--";
     }
@@ -577,6 +771,8 @@ function bindOffsetCalculator(stats) {
   [ySlopeInput, yOffsetInput, xSlopeInput, xOffsetInput].forEach((input) => {
     input.addEventListener("input", updateOutputs);
   });
+
+  updateOutputs();
 }
 
 function formatStat(value) {
