@@ -15,7 +15,11 @@ const tcShiftToolState = {
   chartCustomAngleInput: "",
   chartShowY: true,
   chartShowX: true,
-  chartShowNearby: true
+  chartShowNearby: true,
+  selectedRowIds: [],
+  showExcludedRows: false,
+  exclusionStartInput: "",
+  exclusionEndInput: ""
 };
 
 const tcShiftChartRuntime = {
@@ -101,6 +105,10 @@ function initTcShiftToolPage() {
       yShift: true,
       xShift: true
     };
+    tcShiftToolState.selectedRowIds = [];
+    tcShiftToolState.showExcludedRows = false;
+    tcShiftToolState.exclusionStartInput = "";
+    tcShiftToolState.exclusionEndInput = "";
     tcShiftToolState.chartMode = "all-angle";
     tcShiftToolState.chartAngle = "22.5";
     tcShiftToolState.chartCustomAngle = "";
@@ -309,6 +317,8 @@ function buildShiftRows(angleEvents, shiftEvents) {
 
     if (!targetRow) {
       targetRow = {
+        rowId: `row-${shift.tcTimeMs}-${matchedAngle.angle}-${results.length}-${Math.random().toString(36).slice(2, 8)}`,
+        excluded: false,
         shiftTimeMs: shift.tcTimeMs,
         shiftTimestamp: shift.tcTimestamp,
         date: formatDatePart(shift.tcTimestamp),
@@ -354,11 +364,59 @@ function findLatestAngleBeforeShift(angleEvents, shiftTimeMs) {
   return answer;
 }
 
+function getActiveRows() {
+  return tcShiftToolState.allRows.filter((row) => !row.excluded);
+}
+
+function getDisplayRows() {
+  if (tcShiftToolState.showExcludedRows) {
+    return tcShiftToolState.allRows;
+  }
+  return getActiveRows();
+}
+
+function getExcludedRows() {
+  return tcShiftToolState.allRows.filter((row) => row.excluded);
+}
+
+function getVisibleTableRows() {
+  return getDisplayRows();
+}
+
+function countExcludedRows() {
+  return tcShiftToolState.allRows.filter((row) => row.excluded).length;
+}
+
+function isRowSelected(rowId) {
+  return tcShiftToolState.selectedRowIds.includes(rowId);
+}
+
+function toggleRowSelection(rowId, checked) {
+  if (checked) {
+    if (!tcShiftToolState.selectedRowIds.includes(rowId)) {
+      tcShiftToolState.selectedRowIds.push(rowId);
+    }
+  } else {
+    tcShiftToolState.selectedRowIds = tcShiftToolState.selectedRowIds.filter((id) => id !== rowId);
+  }
+}
+
+function clearSelection() {
+  tcShiftToolState.selectedRowIds = [];
+}
+
+function parseDateTimeLocalInput(value) {
+  if (!value) return null;
+  const ms = new Date(value).getTime();
+  return Number.isNaN(ms) ? null : ms;
+}
+
 function renderTcShiftResults(rows) {
   tcShiftToolState.allRows = rows;
   tcShiftToolState.currentPage = 1;
+  clearSelection();
 
-  const stats = calculateShiftStats(rows);
+  const stats = calculateShiftStats(getActiveRows());
   renderTcShiftStatsToSide(stats);
   renderTcShiftTableAndSummary();
 }
@@ -368,16 +426,21 @@ function renderTcShiftTableAndSummary() {
   const wrap = document.getElementById("tcResultTableWrap");
   if (!summary || !wrap) return;
 
-  const rows = tcShiftToolState.allRows;
+  const activeRows = getActiveRows();
+  const excludedRows = getExcludedRows();
+  const tableRows = getVisibleTableRows();
+
   const pageSize = tcShiftToolState.pageSize;
-  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil(tableRows.length / pageSize));
   const currentPage = Math.min(tcShiftToolState.currentPage, totalPages);
   tcShiftToolState.currentPage = currentPage;
 
   summary.innerHTML = `
     <div class="summary-row">
       <div class="summary-card">
-        <div><strong>结果行数：</strong>${rows.length}</div>
+        <div><strong>总行数：</strong>${tcShiftToolState.allRows.length}</div>
+        <div><strong>当前参与计算：</strong>${activeRows.length}</div>
+        <div><strong>已排除：</strong>${excludedRows.length}</div>
       </div>
 
       <div class="column-toggle-panel">
@@ -403,17 +466,60 @@ function renderTcShiftTableAndSummary() {
         </label>
       </div>
     </div>
+
+    <div class="summary-row bulk-action-row">
+      <div class="bulk-action-group">
+        <button id="clearSelectionBtn" class="tool-btn secondary-btn">清空勾选</button>
+        <button id="excludeSelectedBtn" class="tool-btn warn-btn">排除选中</button>
+        <button id="restoreSelectedBtn" class="tool-btn secondary-btn">恢复选中</button>
+        <button id="restoreAllBtn" class="tool-btn secondary-btn">恢复全部</button>
+      </div>
+
+      <div class="bulk-action-group">
+        <label class="column-toggle-item">
+          <input id="showExcludedRowsToggle" type="checkbox" ${tcShiftToolState.showExcludedRows ? "checked" : ""}>
+          <span>显示已排除行</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="summary-row time-exclude-row">
+      <div class="time-exclude-panel time-range-inline">
+        <input
+          id="excludeStartInput"
+          type="datetime-local"
+          step="1"
+          class="calc-input compact-input time-range-input"
+          value="${escapeHtml(tcShiftToolState.exclusionStartInput)}"
+        />
+
+        <span class="time-range-separator">to</span>
+
+        <input
+          id="excludeEndInput"
+          type="datetime-local"
+          step="1"
+          class="calc-input compact-input time-range-input"
+          value="${escapeHtml(tcShiftToolState.exclusionEndInput)}"
+        />
+
+        <div class="time-exclude-actions">
+          <button id="excludeTimeRangeBtn" class="tool-btn warn-btn">仅取此时段</button>
+        </div>
+      </div>
+    </div>
   `;
 
   bindColumnToggleEvents();
 
-  if (!rows.length) {
-    wrap.innerHTML = `<div class="empty-text">没有解析到符合条件的数据。</div>`;
+  if (!tableRows.length) {
+    wrap.innerHTML = `<div class="empty-text">没有可显示的数据。</div>`;
+    renderTcShiftStatsToSide(calculateShiftStats(activeRows));
     return;
   }
 
   const startIndex = (currentPage - 1) * pageSize;
-  const pageRows = rows.slice(startIndex, startIndex + pageSize);
+  const pageRows = tableRows.slice(startIndex, startIndex + pageSize);
 
   wrap.innerHTML = `
     ${buildTcShiftTableHtml(pageRows)}
@@ -441,19 +547,23 @@ function renderTcShiftTableAndSummary() {
   `;
 
   bindPaginationEvents(totalPages);
+  bindTableRowSelectionEvents();
+  bindSelectionToolbarEvents(pageRows);
   bindChartEvents();
   drawTcShiftChart();
+  renderTcShiftStatsToSide(calculateShiftStats(activeRows));
 }
 
 function buildTcShiftTableHtml(rows) {
   const visible = tcShiftToolState.visibleColumns;
 
-  const headers = [];
+  const headers = [`<th class="select-col"><input id="selectAllCurrentPageCheckbox" type="checkbox" /></th>`];
   if (visible.date) headers.push(`<th>Date</th>`);
   if (visible.time) headers.push(`<th>Time</th>`);
   if (visible.angle) headers.push(`<th>Angle</th>`);
   if (visible.yShift) headers.push(`<th>Y shift</th>`);
   if (visible.xShift) headers.push(`<th>X shift</th>`);
+  headers.push(`<th>Status</th>`);
 
   const bodyRows = rows
     .map((row) => {
@@ -462,10 +572,23 @@ function buildTcShiftTableHtml(rows) {
       const xDanger =
         row.xShift !== "" && (Number(row.xShift) < -2 || Number(row.xShift) > 2);
 
-      const cells = [];
+      const rowClass = row.excluded ? "excluded-row" : "";
+
+      const cells = [
+        `<td class="select-col">
+          <input
+            class="row-select-checkbox"
+            type="checkbox"
+            data-row-id="${escapeHtml(row.rowId)}"
+            ${isRowSelected(row.rowId) ? "checked" : ""}
+          />
+        </td>`
+      ];
+
       if (visible.date) cells.push(`<td class="muted-cell">${escapeHtml(row.date)}</td>`);
       if (visible.time) cells.push(`<td class="muted-cell">${escapeHtml(row.time)}</td>`);
       if (visible.angle) cells.push(`<td class="muted-cell">${formatNumber(row.angle)}</td>`);
+
       if (visible.yShift) {
         cells.push(`
           <td class="shift-cell ${yDanger ? "shift-danger" : ""}">
@@ -473,6 +596,7 @@ function buildTcShiftTableHtml(rows) {
           </td>
         `);
       }
+
       if (visible.xShift) {
         cells.push(`
           <td class="shift-cell ${xDanger ? "shift-danger" : ""}">
@@ -481,7 +605,13 @@ function buildTcShiftTableHtml(rows) {
         `);
       }
 
-      return `<tr>${cells.join("")}</tr>`;
+      cells.push(`
+        <td>
+          ${row.excluded ? '<span class="row-status-badge excluded">Excluded</span>' : '<span class="row-status-badge active">Active</span>'}
+        </td>
+      `);
+
+      return `<tr class="${rowClass}">${cells.join("")}</tr>`;
     })
     .join("");
 
@@ -554,6 +684,164 @@ function bindColumnToggleEvents() {
       renderTcShiftTableAndSummary();
     });
   });
+}
+
+function bindSelectionToolbarEvents(pageRows) {
+  const showExcludedRowsToggle = document.getElementById("showExcludedRowsToggle");
+  const clearSelectionBtn = document.getElementById("clearSelectionBtn");
+  const excludeSelectedBtn = document.getElementById("excludeSelectedBtn");
+  const restoreSelectedBtn = document.getElementById("restoreSelectedBtn");
+  const restoreAllBtn = document.getElementById("restoreAllBtn");
+  const excludeTimeRangeBtn = document.getElementById("excludeTimeRangeBtn");
+  const excludeStartInput = document.getElementById("excludeStartInput");
+  const excludeEndInput = document.getElementById("excludeEndInput");
+  const rowCheckboxes = document.querySelectorAll(".row-select-checkbox");
+  const selectAllCurrentPageCheckbox = document.getElementById("selectAllCurrentPageCheckbox");
+
+  if (showExcludedRowsToggle) {
+    showExcludedRowsToggle.addEventListener("change", () => {
+      tcShiftToolState.showExcludedRows = showExcludedRowsToggle.checked;
+      tcShiftToolState.currentPage = 1;
+      renderTcShiftStatsToSide(calculateShiftStats(getActiveRows()));
+      renderTcShiftTableAndSummary();
+    });
+  }
+
+  rowCheckboxes.forEach((checkbox) => {
+    checkbox.addEventListener("change", (event) => {
+      const rowId = event.target.dataset.rowId;
+      toggleRowSelection(rowId, event.target.checked);
+    });
+  });
+
+  if (selectAllCurrentPageCheckbox) {
+    const pageRowIds = pageRows.map((row) => row.rowId);
+    const allChecked =
+      pageRowIds.length > 0 && pageRowIds.every((rowId) => tcShiftToolState.selectedRowIds.includes(rowId));
+    selectAllCurrentPageCheckbox.checked = allChecked;
+
+    selectAllCurrentPageCheckbox.addEventListener("change", () => {
+      pageRowIds.forEach((rowId) => {
+        toggleRowSelection(rowId, selectAllCurrentPageCheckbox.checked);
+      });
+      renderTcShiftTableAndSummary();
+    });
+  }
+
+  if (clearSelectionBtn) {
+    clearSelectionBtn.addEventListener("click", () => {
+      clearSelection();
+      renderTcShiftTableAndSummary();
+    });
+  }
+
+  if (excludeSelectedBtn) {
+    excludeSelectedBtn.addEventListener("click", () => {
+      const selectedSet = new Set(tcShiftToolState.selectedRowIds);
+      tcShiftToolState.allRows.forEach((row) => {
+        if (selectedSet.has(row.rowId)) {
+          row.excluded = true;
+        }
+      });
+      clearSelection();
+      renderTcShiftStatsToSide(calculateShiftStats(getActiveRows()));
+      renderTcShiftTableAndSummary();
+    });
+  }
+
+  if (restoreSelectedBtn) {
+    restoreSelectedBtn.addEventListener("click", () => {
+      const selectedSet = new Set(tcShiftToolState.selectedRowIds);
+      tcShiftToolState.allRows.forEach((row) => {
+        if (selectedSet.has(row.rowId)) {
+          row.excluded = false;
+        }
+      });
+      clearSelection();
+      renderTcShiftStatsToSide(calculateShiftStats(getActiveRows()));
+      renderTcShiftTableAndSummary();
+    });
+  }
+
+  if (restoreAllBtn) {
+    restoreAllBtn.addEventListener("click", () => {
+      tcShiftToolState.allRows.forEach((row) => {
+        row.excluded = false;
+      });
+      clearSelection();
+      renderTcShiftStatsToSide(calculateShiftStats(getActiveRows()));
+      renderTcShiftTableAndSummary();
+    });
+  }
+
+  if (excludeStartInput) {
+    excludeStartInput.addEventListener("input", () => {
+      tcShiftToolState.exclusionStartInput = excludeStartInput.value;
+    });
+  }
+
+  if (excludeEndInput) {
+    excludeEndInput.addEventListener("input", () => {
+      tcShiftToolState.exclusionEndInput = excludeEndInput.value;
+    });
+  }
+
+  if (excludeTimeRangeBtn) {
+    excludeTimeRangeBtn.addEventListener("click", () => {
+      const startMs = parseDateTimeLocalInput(tcShiftToolState.exclusionStartInput);
+      const endMs = parseDateTimeLocalInput(tcShiftToolState.exclusionEndInput);
+
+      if (startMs === null || endMs === null) {
+        alert("请先输入有效的起始和结束时间。");
+        return;
+      }
+
+      if (startMs > endMs) {
+        alert("起始时间不能晚于结束时间。");
+        return;
+      }
+
+      let matchedCount = 0;
+
+      tcShiftToolState.allRows.forEach((row) => {
+        const inRange = row.shiftTimeMs >= startMs && row.shiftTimeMs <= endMs;
+        row.excluded = !inRange;
+        if (inRange) matchedCount += 1;
+      });
+
+      if (matchedCount === 0) {
+        alert("这个时段内没有匹配到任何数据。请检查时间是否和当前数据日期一致。");
+      }
+
+      clearSelection();
+      renderTcShiftStatsToSide(calculateShiftStats(getActiveRows()));
+      renderTcShiftTableAndSummary();
+    });
+  }
+}
+
+function bindTableRowSelectionEvents() {
+  const rowCheckboxes = document.querySelectorAll(".row-select-checkbox");
+  rowCheckboxes.forEach((checkbox) => {
+    checkbox.addEventListener("change", (event) => {
+      const rowId = event.target.dataset.rowId;
+      toggleRowSelection(rowId, event.target.checked);
+    });
+  });
+
+  const selectAllCurrentPageCheckbox = document.getElementById("selectAllCurrentPageCheckbox");
+  if (selectAllCurrentPageCheckbox) {
+    selectAllCurrentPageCheckbox.addEventListener("change", (event) => {
+      const checked = event.target.checked;
+      const currentPageCheckboxes = document.querySelectorAll(".row-select-checkbox");
+
+      currentPageCheckboxes.forEach((checkbox) => {
+        checkbox.checked = checked;
+        const rowId = checkbox.dataset.rowId;
+        toggleRowSelection(rowId, checked);
+      });
+    });
+  }
 }
 
 function parseCsvText(text, fileName) {
@@ -872,82 +1160,87 @@ function formatStat(value) {
 function buildTcShiftChartSectionHtml() {
   return `
     <section class="chart-section-card">
-      <div class="chart-toolbar">
-        <div class="chart-toolbar-left">
-          <label class="chart-control">
-            <span>图表模式</span>
-            <select id="chartModeSelect" class="chart-select">
-              <option value="all-angle" ${tcShiftToolState.chartMode === "all-angle" ? "selected" : ""}>全角度散点图</option>
-              <option value="single-angle" ${tcShiftToolState.chartMode === "single-angle" ? "selected" : ""}>单角度时间图</option>
-            </select>
-          </label>
+      <div class="chart-panel-top">
+        <div class="chart-toolbar chart-toolbar-main">
+          <div class="chart-toolbar-left chart-toolbar-grid">
+            <label class="chart-control">
+              <span>图表模式</span>
+              <select id="chartModeSelect" class="chart-select">
+                <option value="all-angle" ${tcShiftToolState.chartMode === "all-angle" ? "selected" : ""}>全角度散点图</option>
+                <option value="single-angle" ${tcShiftToolState.chartMode === "single-angle" ? "selected" : ""}>单角度时间图</option>
+              </select>
+            </label>
 
-          <label class="chart-control" id="chartAngleControl" ${tcShiftToolState.chartMode === "single-angle" ? "" : 'style="display:none;"'}>
-            <span>角度</span>
-            <select id="chartAngleSelect" class="chart-select">
-              ${[0, 22.5, 45, 67.5, 90, 112.5, 135, 157.5, 180]
-                .map(
-                  (angle) =>
-                    `<option value="${angle}" ${String(angle) === String(tcShiftToolState.chartAngle) ? "selected" : ""}>${angle}°</option>`
-                )
-                .join("")}
-              <option value="custom" ${tcShiftToolState.chartAngle === "custom" ? "selected" : ""}>自定义</option>
-            </select>
-          </label>
+            <label class="chart-control" id="chartAngleControl" ${tcShiftToolState.chartMode === "single-angle" ? "" : 'style="display:none;"'}>
+              <span>角度</span>
+              <select id="chartAngleSelect" class="chart-select">
+                ${[0, 22.5, 45, 67.5, 90, 112.5, 135, 157.5, 180]
+                  .map(
+                    (angle) =>
+                      `<option value="${angle}" ${String(angle) === String(tcShiftToolState.chartAngle) ? "selected" : ""}>${angle}°</option>`
+                  )
+                  .join("")}
+                <option value="custom" ${tcShiftToolState.chartAngle === "custom" ? "selected" : ""}>自定义</option>
+              </select>
+            </label>
 
-          <label
-            class="chart-control"
-            id="chartCustomAngleControl"
-            ${
-              tcShiftToolState.chartMode === "single-angle" &&
-              tcShiftToolState.chartAngle === "custom"
-                ? ""
-                : 'style="display:none;"'
-            }
-          >
-            <span>自定义角度</span>
-            <input
-              id="chartCustomAngleInput"
-              class="chart-select"
-              type="number"
-              min="-5"
-              max="180"
-              step="0.1"
-              placeholder="例如 40"
-              value="${escapeHtml(tcShiftToolState.chartCustomAngleInput)}"
-            />
-          </label>
+            <label
+              class="chart-control chart-control-custom"
+              id="chartCustomAngleControl"
+              ${
+                tcShiftToolState.chartMode === "single-angle" &&
+                tcShiftToolState.chartAngle === "custom"
+                  ? ""
+                  : 'style="display:none;"'
+              }
+            >
+              <span>自定义角度</span>
+              <input
+                id="chartCustomAngleInput"
+                class="chart-select chart-input"
+                type="number"
+                min="-5"
+                max="180"
+                step="0.1"
+                placeholder="例如 40"
+                value="${escapeHtml(tcShiftToolState.chartCustomAngleInput)}"
+              />
+            </label>
+          </div>
         </div>
 
-        <div class="chart-toolbar-right">
-          <label class="chart-check-item">
-            <input id="chartShowY" type="checkbox" ${tcShiftToolState.chartShowY ? "checked" : ""} />
-            <span>Y shift</span>
-          </label>
-          <label class="chart-check-item">
-            <input id="chartShowX" type="checkbox" ${tcShiftToolState.chartShowX ? "checked" : ""} />
-            <span>X shift</span>
-          </label>
-          <label class="chart-check-item" id="chartNearbyToggleWrap" ${tcShiftToolState.chartMode === "single-angle" ? "" : 'style="display:none;"'}>
-            <input id="chartShowNearby" type="checkbox" ${tcShiftToolState.chartShowNearby ? "checked" : ""} />
-            <span>Nearby angle</span>
-          </label>
+        <div class="chart-toolbar chart-toolbar-sub">
+          <div class="chart-toolbar-right chart-toggle-group">
+            <label class="chart-check-item">
+              <input id="chartShowY" type="checkbox" ${tcShiftToolState.chartShowY ? "checked" : ""} />
+              <span>Y shift</span>
+            </label>
+            <label class="chart-check-item">
+              <input id="chartShowX" type="checkbox" ${tcShiftToolState.chartShowX ? "checked" : ""} />
+              <span>X shift</span>
+            </label>
+            <label class="chart-check-item" id="chartNearbyToggleWrap" ${tcShiftToolState.chartMode === "single-angle" ? "" : 'style="display:none;"'}>
+              <input id="chartShowNearby" type="checkbox" ${tcShiftToolState.chartShowNearby ? "checked" : ""} />
+              <span>Nearby angle</span>
+            </label>
+          </div>
         </div>
-      </div>
 
-      <div class="chart-legend">
-        <span class="legend-item">
-          <span class="legend-dot legend-dot-y"></span>Y shift
-        </span>
-        <span class="legend-item">
-          <span class="legend-dot legend-dot-x"></span>X shift
-        </span>
-        <span class="legend-item">
-          <span class="legend-swatch legend-swatch-main"></span>Target
-        </span>
-        <span class="legend-item">
-          <span class="legend-swatch legend-swatch-soft"></span>Nearby
-        </span>
+        <div class="chart-legend chart-legend-compact">
+          <span class="legend-item">
+            <span class="legend-dot legend-dot-y"></span>Y shift
+          </span>
+          <span class="legend-item">
+            <span class="legend-dot legend-dot-x"></span>X shift
+          </span>
+          <span class="legend-item">
+            <span class="legend-swatch legend-swatch-main"></span>Target
+          </span>
+          <span class="legend-item">
+            <span class="legend-swatch legend-swatch-soft"></span>Nearby
+          </span>
+          <span class="chart-threshold-note">Alarm threshold: ±2</span>
+        </div>
       </div>
 
       <div class="chart-canvas-wrap">
@@ -1116,7 +1409,7 @@ function drawTcShiftChart() {
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
 
-  const rows = tcShiftToolState.allRows || [];
+  const rows = getActiveRows() || [];
   const width = canvas.width;
   const height = canvas.height;
 

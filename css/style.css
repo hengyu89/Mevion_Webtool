@@ -806,3 +806,319 @@ body {
     rgba(59, 130, 246, 0.38) 50% 100%
   );
 }
+
+.chart-section-card {
+  padding: 24px 26px 18px;
+}
+
+.chart-panel-top {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.chart-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.chart-toolbar-main {
+  margin-bottom: 2px;
+}
+
+.chart-toolbar-sub {
+  margin-bottom: 0;
+}
+
+.chart-toolbar-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(180px, 280px));
+  gap: 16px 18px;
+  align-items: end;
+}
+
+.chart-control {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.chart-control > span {
+  font-size: 15px;
+  font-weight: 600;
+  color: #3d3d3d;
+}
+
+.chart-control-custom > span {
+  font-size: 14px;
+  font-weight: 600;
+  color: #585858;
+}
+
+.chart-select,
+.chart-input {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 16px;
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.78);
+  color: #222;
+  font-size: 15px;
+  box-sizing: border-box;
+}
+
+.chart-input::placeholder {
+  color: rgba(0, 0, 0, 0.35);
+}
+
+.chart-toggle-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px 22px;
+  align-items: center;
+}
+
+.chart-check-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 500;
+  color: #4c4c4c;
+}
+
+.chart-check-item input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 20px;
+  align-items: center;
+}
+
+.chart-legend-compact {
+  margin: 0 0 2px;
+  padding-top: 2px;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #5a5a5a;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.legend-dot,
+.legend-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+}
+
+.legend-dot {
+  border-radius: 999px;
+}
+
+.legend-swatch {
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.16);
+}
+
+.legend-dot-y {
+  background: #f59e0b;
+}
+
+.legend-dot-x {
+  background: #3b82f6;
+}
+
+.legend-swatch-main {
+  background: linear-gradient(90deg, #f59e0b 0 50%, #3b82f6 50% 100%);
+}
+
+.legend-swatch-soft {
+  background: linear-gradient(
+    90deg,
+    rgba(245, 158, 11, 0.35) 0 50%,
+    rgba(59, 130, 246, 0.35) 50% 100%
+  );
+}
+
+.chart-threshold-note {
+  margin-left: 6px;
+  font-size: 13px;
+  color: #8b8b8b;
+}
+
+.chart-canvas-wrap {
+  margin-top: 6px;
+  padding-top: 4px;
+}
+
+@media (max-width: 1100px) {
+  .chart-toolbar-grid {
+    grid-template-columns: repeat(2, minmax(180px, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .chart-toolbar-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .chart-toggle-group {
+    gap: 12px 16px;
+  }
+
+  .chart-threshold-note {
+    margin-left: 0;
+    width: 100%;
+  }
+}
+
+.summary-row-top {
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.summary-card-wide {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 18px;
+}
+
+.selection-toolbar,
+.time-range-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 14px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.selection-check-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #4f4f4f;
+  font-size: 14px;
+}
+
+.small-btn {
+  padding: 8px 14px;
+  min-height: 38px;
+  font-size: 14px;
+}
+
+.warn-btn {
+  border-color: rgba(220, 38, 38, 0.18);
+}
+
+.time-range-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 220px;
+}
+
+.time-range-field > span {
+  font-size: 13px;
+  color: #666;
+  font-weight: 600;
+}
+
+.time-range-actions {
+  display: flex;
+  align-items: flex-end;
+  min-height: 64px;
+}
+
+.select-col {
+  width: 44px;
+  text-align: center;
+}
+
+.excluded-row {
+  opacity: 0.56;
+  background: rgba(220, 38, 38, 0.04);
+}
+
+.row-status-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.row-status-badge.active {
+  background: rgba(34, 197, 94, 0.10);
+  color: #198754;
+}
+
+.row-status-badge.excluded {
+  background: rgba(220, 38, 38, 0.10);
+  color: #c0392b;
+}
+
+.time-exclude-row .time-exclude-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 14px 16px;
+}
+
+.time-exclude-row .calc-field {
+  min-width: 240px;
+  margin-bottom: 0;
+}
+
+.time-exclude-row .time-exclude-actions {
+  display: flex;
+  align-items: flex-end;
+  min-height: auto;
+}
+
+.time-exclude-row .time-exclude-actions .tool-btn {
+  min-height: 44px;
+}
+
+.time-range-inline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: nowrap; /* ❗关键：禁止换行 */
+}
+
+.time-range-input {
+  width: 220px;      /* ❗从 260 改小 */
+  min-width: 0;      /* ❗避免撑开 */
+}
+
+.time-range-separator {
+  font-size: 14px;
+  font-weight: 600;
+  color: #777;
+  display: flex;
+  align-items: center; /* ❗让 to 垂直居中 */
+}
+
+.time-exclude-actions {
+  display: flex;
+  align-items: center;
+}
+
+.time-exclude-actions .tool-btn {
+  white-space: nowrap; /* ❗防止按钮被拆行 */
+}
