@@ -11,6 +11,8 @@ const tcShiftToolState = {
   },
   chartMode: "all-angle",
   chartAngle: "22.5",
+  chartCustomAngle: "",
+  chartCustomAngleInput: "",
   chartShowY: true,
   chartShowX: true,
   chartShowNearby: true
@@ -73,6 +75,19 @@ function getFixedAngleTicks() {
   return TC_SHIFT_TARGET_ANGLES.slice();
 }
 
+function parseCustomAngleInput(value) {
+  const text = String(value).trim();
+  if (!text) return null;
+
+  if (!/^-?\d+(\.\d)?$/.test(text)) return null;
+
+  const num = Number(text);
+  if (Number.isNaN(num)) return null;
+  if (num < -5 || num > 180) return null;
+
+  return num;
+}
+
 function initTcShiftToolPage() {
   const root = document.getElementById("tcShiftToolRoot");
   if (!root) return;
@@ -88,6 +103,8 @@ function initTcShiftToolPage() {
     };
     tcShiftToolState.chartMode = "all-angle";
     tcShiftToolState.chartAngle = "22.5";
+    tcShiftToolState.chartCustomAngle = "";
+    tcShiftToolState.chartCustomAngleInput = "";
     tcShiftToolState.chartShowY = true;
     tcShiftToolState.chartShowX = true;
     tcShiftToolState.chartShowNearby = true;
@@ -874,7 +891,31 @@ function buildTcShiftChartSectionHtml() {
                     `<option value="${angle}" ${String(angle) === String(tcShiftToolState.chartAngle) ? "selected" : ""}>${angle}°</option>`
                 )
                 .join("")}
+              <option value="custom" ${tcShiftToolState.chartAngle === "custom" ? "selected" : ""}>自定义</option>
             </select>
+          </label>
+
+          <label
+            class="chart-control"
+            id="chartCustomAngleControl"
+            ${
+              tcShiftToolState.chartMode === "single-angle" &&
+              tcShiftToolState.chartAngle === "custom"
+                ? ""
+                : 'style="display:none;"'
+            }
+          >
+            <span>自定义角度</span>
+            <input
+              id="chartCustomAngleInput"
+              class="chart-select"
+              type="number"
+              min="-5"
+              max="180"
+              step="0.1"
+              placeholder="例如 40"
+              value="${escapeHtml(tcShiftToolState.chartCustomAngleInput)}"
+            />
           </label>
         </div>
 
@@ -922,6 +963,8 @@ function bindChartEvents() {
   const showY = document.getElementById("chartShowY");
   const showX = document.getElementById("chartShowX");
   const showNearby = document.getElementById("chartShowNearby");
+  const customAngleControl = document.getElementById("chartCustomAngleControl");
+  const customAngleInput = document.getElementById("chartCustomAngleInput");
   const canvas = document.getElementById("tcShiftChartCanvas");
 
   if (modeSelect) {
@@ -940,6 +983,14 @@ function bindChartEvents() {
           tcShiftToolState.chartMode === "single-angle" ? "" : "none";
       }
 
+      if (customAngleControl) {
+        customAngleControl.style.display =
+          tcShiftToolState.chartMode === "single-angle" &&
+          tcShiftToolState.chartAngle === "custom"
+            ? ""
+            : "none";
+      }
+
       tcShiftChartRuntime.hoverPoint = null;
       drawTcShiftChart();
     });
@@ -948,6 +999,21 @@ function bindChartEvents() {
   if (angleSelect) {
     angleSelect.addEventListener("change", () => {
       tcShiftToolState.chartAngle = angleSelect.value;
+
+      if (customAngleControl) {
+        customAngleControl.style.display =
+          tcShiftToolState.chartMode === "single-angle" &&
+          tcShiftToolState.chartAngle === "custom"
+            ? ""
+            : "none";
+      }
+
+      if (tcShiftToolState.chartAngle !== "custom") {
+        tcShiftToolState.chartCustomAngle = "";
+        tcShiftToolState.chartCustomAngleInput = "";
+        if (customAngleInput) customAngleInput.value = "";
+      }
+
       tcShiftChartRuntime.hoverPoint = null;
       drawTcShiftChart();
     });
@@ -972,6 +1038,18 @@ function bindChartEvents() {
   if (showNearby) {
     showNearby.addEventListener("change", () => {
       tcShiftToolState.chartShowNearby = showNearby.checked;
+      tcShiftChartRuntime.hoverPoint = null;
+      drawTcShiftChart();
+    });
+  }
+
+  if (customAngleInput) {
+    customAngleInput.addEventListener("input", () => {
+      tcShiftToolState.chartCustomAngleInput = customAngleInput.value;
+
+      const parsed = parseCustomAngleInput(customAngleInput.value);
+      tcShiftToolState.chartCustomAngle = parsed === null ? "" : String(parsed);
+
       tcShiftChartRuntime.hoverPoint = null;
       drawTcShiftChart();
     });
@@ -1101,7 +1179,18 @@ function drawTcShiftChart() {
     xLabelFormatter = (v) => `${trimTrailingZeros(v)}°`;
     fixedXTicks = getFixedAngleTicks();
   } else {
-    const targetAngle = Number(tcShiftToolState.chartAngle);
+    const targetAngle =
+      tcShiftToolState.chartAngle === "custom"
+        ? parseCustomAngleInput(tcShiftToolState.chartCustomAngleInput)
+        : Number(tcShiftToolState.chartAngle);
+
+    if (targetAngle === null || Number.isNaN(targetAngle)) {
+      ctx.fillStyle = "#777";
+      ctx.font = "16px Segoe UI";
+      ctx.fillText("请输入有效的自定义角度（-5 ~ 180，最多 1 位小数）", 30, 40);
+      return;
+    }
+    
     const filtered = rows.filter((row) =>
       isAngleWithinTargetBin(Number(row.angle), targetAngle)
     );
@@ -1203,6 +1292,26 @@ function drawTcShiftChart() {
     xLabelFormatter,
     xAxisType,
     fixedXTicks
+  });
+
+  drawThresholdLine(ctx, {
+    value: 2,
+    minY,
+    maxY,
+    padding,
+    plotHeight,
+    plotWidth,
+    label: "+2"
+  });
+
+  drawThresholdLine(ctx, {
+    value: -2,
+    minY,
+    maxY,
+    padding,
+    plotHeight,
+    plotWidth,
+    label: "-2"
   });
 
   if (tcShiftToolState.chartShowY) {
@@ -1351,6 +1460,33 @@ function drawChartAxes(ctx, padding, plotWidth, plotHeight) {
   ctx.lineTo(padding.left, padding.top + plotHeight);
   ctx.lineTo(padding.left + plotWidth, padding.top + plotHeight);
   ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawThresholdLine(ctx, config) {
+  const { value, minY, maxY, padding, plotHeight, plotWidth, label } = config;
+
+  if (value < minY || value > maxY) return;
+
+  const y = padding.top + (1 - (value - minY) / (maxY - minY)) * plotHeight;
+
+  ctx.save();
+
+  ctx.strokeStyle = "rgba(220, 38, 38, 0.65)";
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([8, 6]);
+
+  ctx.beginPath();
+  ctx.moveTo(padding.left, y);
+  ctx.lineTo(padding.left + plotWidth, y);
+  ctx.stroke();
+
+  ctx.setLineDash([]);
+  ctx.fillStyle = "rgba(180, 30, 30, 0.9)";
+  ctx.font = "12px Segoe UI";
+  ctx.textAlign = "left";
+  ctx.fillText(label, padding.left + 8, y - 6);
 
   ctx.restore();
 }

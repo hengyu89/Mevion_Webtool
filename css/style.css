@@ -752,3 +752,57 @@ body {
   height: auto;
   display: block;
 }
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  align-items: center;
+  margin: 10px 0 14px;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #555;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.legend-dot,
+.legend-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+}
+
+.legend-dot {
+  border-radius: 999px;
+}
+
+.legend-swatch {
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+}
+
+.legend-dot-y {
+  background: #f59e0b;
+}
+
+.legend-dot-x {
+  background: #3b82f6;
+}
+
+.legend-swatch-main {
+  background: linear-gradient(90deg, #f59e0b 0 50%, #3b82f6 50% 100%);
+}
+
+.legend-swatch-soft {
+  background: linear-gradient(
+    90deg,
+    rgba(245, 158, 11, 0.38) 0 50%,
+    rgba(59, 130, 246, 0.38) 50% 100%
+  );
+}
