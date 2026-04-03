@@ -12,7 +12,8 @@ const tcShiftToolState = {
   chartMode: "all-angle",
   chartAngle: "22.5",
   chartShowY: true,
-  chartShowX: true
+  chartShowX: true,
+  chartShowNearby: true
 };
 
 const tcShiftChartRuntime = {
@@ -20,6 +21,57 @@ const tcShiftChartRuntime = {
   interactivePoints: [],
   mouseBound: false
 };
+
+const TC_SHIFT_TARGET_ANGLES = [0, 22.5, 45, 67.5, 90, 112.5, 135, 157.5, 180];
+const TC_SHIFT_ANGLE_BIN_HALF = 11.25;
+const TC_SHIFT_MIN_ANGLE = -5;
+const TC_SHIFT_MAX_ANGLE = 185;
+
+function normalizeAngleForDisplay(angle) {
+  const num = Number(angle);
+  if (Number.isNaN(num)) return null;
+  return num;
+}
+
+function getAngleBinRange(targetAngle) {
+  if (targetAngle === 0) {
+    return { min: TC_SHIFT_MIN_ANGLE, max: TC_SHIFT_ANGLE_BIN_HALF };
+  }
+
+  if (targetAngle === 180) {
+    return { min: 180 - TC_SHIFT_ANGLE_BIN_HALF, max: TC_SHIFT_MAX_ANGLE };
+  }
+
+  return {
+    min: targetAngle - TC_SHIFT_ANGLE_BIN_HALF,
+    max: targetAngle + TC_SHIFT_ANGLE_BIN_HALF
+  };
+}
+
+function isAngleWithinTargetBin(angle, targetAngle) {
+  const num = Number(angle);
+  if (Number.isNaN(num)) return false;
+
+  const range = getAngleBinRange(targetAngle);
+
+  if (targetAngle === 0) {
+    return num >= range.min && num <= range.max;
+  }
+
+  if (targetAngle === 180) {
+    return num > range.min && num <= range.max;
+  }
+
+  return num > range.min && num <= range.max;
+}
+
+function isExactTargetAngle(angle, targetAngle) {
+  return Math.abs(Number(angle) - Number(targetAngle)) < 0.000001;
+}
+
+function getFixedAngleTicks() {
+  return TC_SHIFT_TARGET_ANGLES.slice();
+}
 
 function initTcShiftToolPage() {
   const root = document.getElementById("tcShiftToolRoot");
@@ -38,6 +90,7 @@ function initTcShiftToolPage() {
     tcShiftToolState.chartAngle = "22.5";
     tcShiftToolState.chartShowY = true;
     tcShiftToolState.chartShowX = true;
+    tcShiftToolState.chartShowNearby = true;
 
   root.innerHTML = `
     <div class="tool-block">
@@ -834,6 +887,10 @@ function buildTcShiftChartSectionHtml() {
             <input id="chartShowX" type="checkbox" ${tcShiftToolState.chartShowX ? "checked" : ""} />
             <span>X shift</span>
           </label>
+          <label class="chart-check-item" id="chartNearbyToggleWrap" ${tcShiftToolState.chartMode === "single-angle" ? "" : 'style="display:none;"'}>
+            <input id="chartShowNearby" type="checkbox" ${tcShiftToolState.chartShowNearby ? "checked" : ""} />
+            <span>Nearby angle</span>
+          </label>
         </div>
       </div>
 
@@ -843,6 +900,12 @@ function buildTcShiftChartSectionHtml() {
         </span>
         <span class="legend-item">
           <span class="legend-dot legend-dot-x"></span>X shift
+        </span>
+        <span class="legend-item">
+          <span class="legend-swatch legend-swatch-main"></span>Target
+        </span>
+        <span class="legend-item">
+          <span class="legend-swatch legend-swatch-soft"></span>Nearby
         </span>
       </div>
 
@@ -858,6 +921,7 @@ function bindChartEvents() {
   const angleSelect = document.getElementById("chartAngleSelect");
   const showY = document.getElementById("chartShowY");
   const showX = document.getElementById("chartShowX");
+  const showNearby = document.getElementById("chartShowNearby");
   const canvas = document.getElementById("tcShiftChartCanvas");
 
   if (modeSelect) {
@@ -867,6 +931,12 @@ function bindChartEvents() {
       const angleControl = document.getElementById("chartAngleControl");
       if (angleControl) {
         angleControl.style.display =
+          tcShiftToolState.chartMode === "single-angle" ? "" : "none";
+      }
+
+      const nearbyToggleWrap = document.getElementById("chartNearbyToggleWrap");
+      if (nearbyToggleWrap) {
+        nearbyToggleWrap.style.display =
           tcShiftToolState.chartMode === "single-angle" ? "" : "none";
       }
 
@@ -894,6 +964,14 @@ function bindChartEvents() {
   if (showX) {
     showX.addEventListener("change", () => {
       tcShiftToolState.chartShowX = showX.checked;
+      tcShiftChartRuntime.hoverPoint = null;
+      drawTcShiftChart();
+    });
+  }
+
+  if (showNearby) {
+    showNearby.addEventListener("change", () => {
+      tcShiftToolState.chartShowNearby = showNearby.checked;
       tcShiftChartRuntime.hoverPoint = null;
       drawTcShiftChart();
     });
@@ -983,6 +1061,7 @@ function drawTcShiftChart() {
   let xAxisType = "numeric";
   let xAxisTitle = "Angle";
   let xLabelFormatter = (v) => String(v);
+  let fixedXTicks = null;
 
   if (tcShiftToolState.chartMode === "all-angle") {
     const filtered = rows.filter((row) => row.angle !== "" && row.angle !== null);
@@ -998,7 +1077,8 @@ function drawTcShiftChart() {
         angle: row.angle,
         yShift: row.yShift,
         xShift: row.xShift,
-        series: "Y"
+        series: "Y",
+        isNearbyAngle: false
       }));
 
     dataX = filtered
@@ -1012,19 +1092,27 @@ function drawTcShiftChart() {
         angle: row.angle,
         yShift: row.yShift,
         xShift: row.xShift,
-        series: "X"
+        series: "X",
+        isNearbyAngle: false
       }));
 
     xAxisType = "numeric";
     xAxisTitle = "Angle";
     xLabelFormatter = (v) => `${trimTrailingZeros(v)}°`;
+    fixedXTicks = getFixedAngleTicks();
   } else {
     const targetAngle = Number(tcShiftToolState.chartAngle);
-    const filtered = rows.filter((row) => Number(row.angle) === targetAngle);
+    const filtered = rows.filter((row) =>
+      isAngleWithinTargetBin(Number(row.angle), targetAngle)
+    );
     const sameDayMode = isSameDayRange(filtered.map((row) => row.shiftTimeMs));
 
     dataY = filtered
       .filter((row) => row.yShift !== "")
+      .filter((row) => {
+        if (tcShiftToolState.chartShowNearby) return true;
+        return isExactTargetAngle(Number(row.angle), targetAngle);
+      })
       .map((row, index) => ({
         x: row.shiftTimeMs,
         y: Number(row.yShift),
@@ -1034,11 +1122,16 @@ function drawTcShiftChart() {
         angle: row.angle,
         yShift: row.yShift,
         xShift: row.xShift,
-        series: "Y"
+        series: "Y",
+        isNearbyAngle: !isExactTargetAngle(Number(row.angle), targetAngle)
       }));
 
     dataX = filtered
       .filter((row) => row.xShift !== "")
+      .filter((row) => {
+        if (tcShiftToolState.chartShowNearby) return true;
+        return isExactTargetAngle(Number(row.angle), targetAngle);
+      })
       .map((row, index) => ({
         x: row.shiftTimeMs,
         y: Number(row.xShift),
@@ -1048,12 +1141,14 @@ function drawTcShiftChart() {
         angle: row.angle,
         yShift: row.yShift,
         xShift: row.xShift,
-        series: "X"
+        series: "X",
+        isNearbyAngle: !isExactTargetAngle(Number(row.angle), targetAngle)
       }));
 
     xAxisType = "time";
     xAxisTitle = "Time";
     xLabelFormatter = (v) => formatSmartTimeLabel(v, sameDayMode);
+    fixedXTicks = null;
   }
 
   const combined = [];
@@ -1072,14 +1167,12 @@ function drawTcShiftChart() {
   let minY = Math.min(...combined.map((p) => p.y));
   let maxY = Math.max(...combined.map((p) => p.y));
 
-  if (minX === maxX) {
-    if (xAxisType === "time") {
-      minX -= 1000;
-      maxX += 1000;
-    } else {
-      minX -= 1;
-      maxX += 1;
-    }
+  if (tcShiftToolState.chartMode === "all-angle") {
+    minX = TC_SHIFT_MIN_ANGLE;
+    maxX = TC_SHIFT_MAX_ANGLE;
+  } else if (minX === maxX) {
+    minX -= 1000;
+    maxX += 1000;
   }
 
   if (minY === maxY) {
@@ -1108,7 +1201,8 @@ function drawTcShiftChart() {
     minY,
     maxY,
     xLabelFormatter,
-    xAxisType
+    xAxisType,
+    fixedXTicks
   });
 
   if (tcShiftToolState.chartShowY) {
@@ -1117,7 +1211,10 @@ function drawTcShiftChart() {
       dataY,
       mapX,
       mapY,
-      "#f59e0b",
+      {
+        main: "#f59e0b",
+        soft: "rgba(245, 158, 11, 0.35)"
+      },
       tcShiftToolState.chartMode === "single-angle"
     );
     tcShiftChartRuntime.interactivePoints.push(...yPoints);
@@ -1129,7 +1226,10 @@ function drawTcShiftChart() {
       dataX,
       mapX,
       mapY,
-      "#3b82f6",
+      {
+        main: "#3b82f6",
+        soft: "rgba(59, 130, 246, 0.35)"
+      },
       tcShiftToolState.chartMode === "single-angle"
     );
     tcShiftChartRuntime.interactivePoints.push(...xPoints);
@@ -1164,7 +1264,8 @@ function drawChartGrid(ctx, config) {
     minY,
     maxY,
     xLabelFormatter,
-    xAxisType
+    xAxisType,
+    fixedXTicks
   } = config;
 
   ctx.save();
@@ -1173,17 +1274,26 @@ function drawChartGrid(ctx, config) {
   ctx.lineWidth = 1;
   ctx.setLineDash([4, 4]);
 
-  const verticalLines = xAxisType === "time" ? 7 : 6;
   const horizontalLines = 6;
 
-  for (let i = 0; i <= verticalLines; i++) {
-    const x = padding.left + (i / verticalLines) * plotWidth;
+  let tickValues = [];
+
+  if (Array.isArray(fixedXTicks) && fixedXTicks.length) {
+    tickValues = fixedXTicks;
+  } else {
+    const verticalLines = xAxisType === "time" ? 7 : 6;
+    for (let i = 0; i <= verticalLines; i++) {
+      tickValues.push(minX + (i / verticalLines) * (maxX - minX));
+    }
+  }
+
+  tickValues.forEach((value) => {
+    const x = padding.left + ((value - minX) / (maxX - minX)) * plotWidth;
+
     ctx.beginPath();
     ctx.moveTo(x, padding.top);
     ctx.lineTo(x, padding.top + plotHeight);
     ctx.stroke();
-
-    const value = minX + (i / verticalLines) * (maxX - minX);
 
     ctx.setLineDash([]);
     ctx.fillStyle = "#888";
@@ -1193,11 +1303,11 @@ function drawChartGrid(ctx, config) {
     if (xAxisType === "time") {
       drawWrappedXAxisLabel(ctx, xLabelFormatter(value), x, padding.top + plotHeight + 20);
     } else {
-      ctx.fillText(xLabelFormatter(roundForAxis(value)), x, padding.top + plotHeight + 22);
+      ctx.fillText(xLabelFormatter(value), x, padding.top + plotHeight + 22);
     }
 
     ctx.setLineDash([4, 4]);
-  }
+  });
 
   for (let i = 0; i <= horizontalLines; i++) {
     const y = padding.top + (i / horizontalLines) * plotHeight;
@@ -1245,32 +1355,53 @@ function drawChartAxes(ctx, padding, plotWidth, plotHeight) {
   ctx.restore();
 }
 
-function drawSeries(ctx, data, mapX, mapY, color, connectLine) {
+function drawSeries(ctx, data, mapX, mapY, colorSet, connectLine) {
   if (!data.length) return [];
 
   const points = [];
+  const mainPoints = data.filter((point) => !point.isNearbyAngle);
+  const softPoints = data.filter((point) => point.isNearbyAngle);
 
   ctx.save();
 
   if (connectLine && data.length > 1) {
     ctx.beginPath();
-    ctx.strokeStyle = color;
+    ctx.strokeStyle = colorSet.main;
     ctx.lineWidth = 2;
+
     data.forEach((point, index) => {
       const x = mapX(point.x);
       const y = mapY(point.y);
       if (index === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     });
+
     ctx.stroke();
   }
 
-  data.forEach((point) => {
+  softPoints.forEach((point) => {
     const canvasX = mapX(point.x);
     const canvasY = mapY(point.y);
 
     ctx.beginPath();
-    ctx.fillStyle = color;
+    ctx.fillStyle = colorSet.soft;
+    ctx.arc(canvasX, canvasY, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    points.push({
+      ...point,
+      canvasX,
+      canvasY,
+      color: colorSet.soft
+    });
+  });
+
+  mainPoints.forEach((point) => {
+    const canvasX = mapX(point.x);
+    const canvasY = mapY(point.y);
+
+    ctx.beginPath();
+    ctx.fillStyle = colorSet.main;
     ctx.arc(canvasX, canvasY, 5, 0, Math.PI * 2);
     ctx.fill();
 
@@ -1278,7 +1409,7 @@ function drawSeries(ctx, data, mapX, mapY, color, connectLine) {
       ...point,
       canvasX,
       canvasY,
-      color
+      color: colorSet.main
     });
   });
 
@@ -1307,6 +1438,7 @@ function drawChartTooltip(ctx, point, canvasWidth, canvasHeight) {
   const lines = [
     `Time: ${formatFullTimestamp(point.shiftTimeMs)}`,
     `Angle: ${trimTrailingZeros(point.angle)}°`,
+    `Type: ${point.isNearbyAngle ? "Nearby" : "Target"}`,
     `Y shift: ${point.yShift === "" ? "--" : formatNumber(point.yShift, 6)}`,
     `X shift: ${point.xShift === "" ? "--" : formatNumber(point.xShift, 6)}`
   ];
