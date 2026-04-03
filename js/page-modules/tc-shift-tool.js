@@ -21,6 +21,15 @@ function initTcShiftToolPage() {
     </div>
   `;
 
+  renderTcShiftStatsToSide({
+    yMax: null,
+    yMin: null,
+    yRange: null,
+    xMax: null,
+    xMin: null,
+    xRange: null
+  });
+
   bindTcShiftToolEvents();
 }
 
@@ -237,6 +246,9 @@ function renderTcShiftResults(rows) {
   const wrap = document.getElementById("tcResultTableWrap");
   if (!summary || !wrap) return;
 
+  const stats = calculateShiftStats(rows);
+  renderTcShiftStatsToSide(stats);
+
   summary.innerHTML = `
     <div class="summary-card">
       <div><strong>结果行数：</strong>${rows.length}</div>
@@ -261,17 +273,26 @@ function renderTcShiftResults(rows) {
       </thead>
       <tbody>
         ${rows
-          .map(
-            (row) => `
+          .map((row) => {
+            const yDanger =
+              row.yShift !== "" && (Number(row.yShift) < -2 || Number(row.yShift) > 2);
+            const xDanger =
+              row.xShift !== "" && (Number(row.xShift) < -2 || Number(row.xShift) > 2);
+
+            return `
               <tr>
-                <td>${escapeHtml(row.date)}</td>
-                <td>${escapeHtml(row.time)}</td>
-                <td>${formatNumber(row.angle)}</td>
-                <td>${row.yShift === "" ? "" : formatNumber(row.yShift, 6)}</td>
-                <td>${row.xShift === "" ? "" : formatNumber(row.xShift, 6)}</td>
+                <td class="muted-cell">${escapeHtml(row.date)}</td>
+                <td class="muted-cell">${escapeHtml(row.time)}</td>
+                <td class="muted-cell">${formatNumber(row.angle)}</td>
+                <td class="shift-cell ${yDanger ? "shift-danger" : ""}">
+                  ${row.yShift === "" ? "" : formatNumber(row.yShift, 6)}
+                </td>
+                <td class="shift-cell ${xDanger ? "shift-danger" : ""}">
+                  ${row.xShift === "" ? "" : formatNumber(row.xShift, 6)}
+                </td>
               </tr>
-            `
-          )
+            `;
+          })
           .join("")}
       </tbody>
     </table>
@@ -389,4 +410,176 @@ function escapeHtml(str) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function calculateShiftStats(rows) {
+  const yValues = rows
+    .map((row) => row.yShift)
+    .filter((value) => value !== "")
+    .map(Number);
+
+  const xValues = rows
+    .map((row) => row.xShift)
+    .filter((value) => value !== "")
+    .map(Number);
+
+  const yMax = yValues.length ? Math.max(...yValues) : null;
+  const yMin = yValues.length ? Math.min(...yValues) : null;
+  const xMax = xValues.length ? Math.max(...xValues) : null;
+  const xMin = xValues.length ? Math.min(...xValues) : null;
+
+  return {
+    yMax,
+    yMin,
+    yRange: yMax !== null && yMin !== null ? yMax - yMin : null,
+    xMax,
+    xMin,
+    xRange: xMax !== null && xMin !== null ? xMax - xMin : null
+  };
+}
+
+function renderTcShiftStatsToSide(stats) {
+  const sideContent = document.getElementById("sideContent");
+  if (!sideContent) return;
+
+  sideContent.innerHTML = `
+    <section class="card side-card">
+      <h3 class="side-card-title">第一版规则</h3>
+      <div class="side-list">
+        <div class="side-list-item"><span class="notice-badge">INFO</span>使用 TC Timestamp 作为主时间轴。</div>
+        <div class="side-list-item"><span class="notice-badge">INFO</span>X/Y 时间差不超过 1 秒则尝试合并为同一行。</div>
+        <div class="side-list-item"><span class="notice-badge">INFO</span>连续两个 X 或两个 Y 时自动另起一行。</div>
+        <div class="side-list-item"><span class="notice-badge">INFO</span>支持一次拖入多个 CSV 文件并统一排序。</div>
+      </div>
+    </section>
+
+    <section class="card side-card">
+      <h3 class="side-card-title">Shift 统计</h3>
+      <div class="side-stats-grid">
+        <div class="mini-stat-card">
+          <div class="mini-stat-label">Y max</div>
+          <div class="mini-stat-value">${formatStat(stats.yMax)}</div>
+        </div>
+        <div class="mini-stat-card">
+          <div class="mini-stat-label">Y min</div>
+          <div class="mini-stat-value">${formatStat(stats.yMin)}</div>
+        </div>
+        <div class="mini-stat-card">
+          <div class="mini-stat-label">Y max-min</div>
+          <div class="mini-stat-value">${formatStat(stats.yRange)}</div>
+        </div>
+        <div class="mini-stat-card">
+          <div class="mini-stat-label">X max</div>
+          <div class="mini-stat-value">${formatStat(stats.xMax)}</div>
+        </div>
+        <div class="mini-stat-card">
+          <div class="mini-stat-label">X min</div>
+          <div class="mini-stat-value">${formatStat(stats.xMin)}</div>
+        </div>
+        <div class="mini-stat-card">
+          <div class="mini-stat-label">X max-min</div>
+          <div class="mini-stat-value">${formatStat(stats.xRange)}</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card side-card">
+      <h3 class="side-card-title">Offset 计算</h3>
+
+      <div class="calc-form-grid">
+        <label class="calc-field">
+          <span>Y slope</span>
+          <input id="ySlopeInput" type="number" step="any" class="calc-input" placeholder="输入 Y slope" />
+        </label>
+
+        <label class="calc-field">
+          <span>Y offset</span>
+          <input id="yOffsetInput" type="number" step="any" class="calc-input" placeholder="输入 Y offset" />
+        </label>
+
+        <label class="calc-field">
+          <span>X slope</span>
+          <input id="xSlopeInput" type="number" step="any" class="calc-input" placeholder="输入 X slope" />
+        </label>
+
+        <label class="calc-field">
+          <span>X offset</span>
+          <input id="xOffsetInput" type="number" step="any" class="calc-input" placeholder="输入 X offset" />
+        </label>
+      </div>
+
+      <div class="calc-result-wrap">
+        <div class="calc-result-card">
+          <div class="mini-stat-label">Y new offset</div>
+          <div id="yNewOffsetOutput" class="mini-stat-value">--</div>
+        </div>
+        <div class="calc-result-card">
+          <div class="mini-stat-label">X new offset</div>
+          <div id="xNewOffsetOutput" class="mini-stat-value">--</div>
+        </div>
+      </div>
+    </section>
+  `;
+
+  bindOffsetCalculator(stats);
+}
+
+function bindOffsetCalculator(stats) {
+  const ySlopeInput = document.getElementById("ySlopeInput");
+  const yOffsetInput = document.getElementById("yOffsetInput");
+  const xSlopeInput = document.getElementById("xSlopeInput");
+  const xOffsetInput = document.getElementById("xOffsetInput");
+  const yNewOffsetOutput = document.getElementById("yNewOffsetOutput");
+  const xNewOffsetOutput = document.getElementById("xNewOffsetOutput");
+
+  if (
+    !ySlopeInput ||
+    !yOffsetInput ||
+    !xSlopeInput ||
+    !xOffsetInput ||
+    !yNewOffsetOutput ||
+    !xNewOffsetOutput
+  ) {
+    return;
+  }
+
+  function updateOutputs() {
+    const ySlope = Number(ySlopeInput.value);
+    const yOffset = Number(yOffsetInput.value);
+    const xSlope = Number(xSlopeInput.value);
+    const xOffset = Number(xOffsetInput.value);
+
+    if (
+      ySlopeInput.value !== "" &&
+      yOffsetInput.value !== "" &&
+      stats.yMax !== null &&
+      stats.yMin !== null
+    ) {
+      const yNewOffset = ((stats.yMax + stats.yMin) / 2) * ySlope + yOffset;
+      yNewOffsetOutput.textContent = formatNumber(yNewOffset, 6);
+    } else {
+      yNewOffsetOutput.textContent = "--";
+    }
+
+    if (
+      xSlopeInput.value !== "" &&
+      xOffsetInput.value !== "" &&
+      stats.xMax !== null &&
+      stats.xMin !== null
+    ) {
+      const xNewOffset = ((stats.xMax + stats.xMin) / 2) * xSlope + xOffset;
+      xNewOffsetOutput.textContent = formatNumber(xNewOffset, 6);
+    } else {
+      xNewOffsetOutput.textContent = "--";
+    }
+  }
+
+  [ySlopeInput, yOffsetInput, xSlopeInput, xOffsetInput].forEach((input) => {
+    input.addEventListener("input", updateOutputs);
+  });
+}
+
+function formatStat(value) {
+  if (value === null || value === undefined) return "--";
+  return formatNumber(value, 6);
 }
