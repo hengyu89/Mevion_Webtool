@@ -15,6 +15,12 @@ const tcShiftToolState = {
   chartShowX: true
 };
 
+const tcShiftChartRuntime = {
+  hoverPoint: null,
+  interactivePoints: [],
+  mouseBound: false
+};
+
 function initTcShiftToolPage() {
   const root = document.getElementById("tcShiftToolRoot");
   if (!root) return;
@@ -852,6 +858,7 @@ function bindChartEvents() {
   const angleSelect = document.getElementById("chartAngleSelect");
   const showY = document.getElementById("chartShowY");
   const showX = document.getElementById("chartShowX");
+  const canvas = document.getElementById("tcShiftChartCanvas");
 
   if (modeSelect) {
     modeSelect.addEventListener("change", () => {
@@ -863,6 +870,7 @@ function bindChartEvents() {
           tcShiftToolState.chartMode === "single-angle" ? "" : "none";
       }
 
+      tcShiftChartRuntime.hoverPoint = null;
       drawTcShiftChart();
     });
   }
@@ -870,6 +878,7 @@ function bindChartEvents() {
   if (angleSelect) {
     angleSelect.addEventListener("change", () => {
       tcShiftToolState.chartAngle = angleSelect.value;
+      tcShiftChartRuntime.hoverPoint = null;
       drawTcShiftChart();
     });
   }
@@ -877,6 +886,7 @@ function bindChartEvents() {
   if (showY) {
     showY.addEventListener("change", () => {
       tcShiftToolState.chartShowY = showY.checked;
+      tcShiftChartRuntime.hoverPoint = null;
       drawTcShiftChart();
     });
   }
@@ -884,8 +894,62 @@ function bindChartEvents() {
   if (showX) {
     showX.addEventListener("change", () => {
       tcShiftToolState.chartShowX = showX.checked;
+      tcShiftChartRuntime.hoverPoint = null;
       drawTcShiftChart();
     });
+  }
+
+  if (canvas && !tcShiftChartRuntime.mouseBound) {
+    canvas.addEventListener("mousemove", handleTcShiftChartMouseMove);
+    canvas.addEventListener("mouseleave", handleTcShiftChartMouseLeave);
+    tcShiftChartRuntime.mouseBound = true;
+  }
+}
+
+function handleTcShiftChartMouseMove(event) {
+  const canvas = event.currentTarget;
+  if (!canvas) return;
+
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+
+  const mouseX = (event.clientX - rect.left) * scaleX;
+  const mouseY = (event.clientY - rect.top) * scaleY;
+
+  const points = tcShiftChartRuntime.interactivePoints || [];
+  let nearest = null;
+  let nearestDist = Infinity;
+
+  for (const point of points) {
+    const dx = mouseX - point.canvasX;
+    const dy = mouseY - point.canvasY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist <= 10 && dist < nearestDist) {
+      nearest = point;
+      nearestDist = dist;
+    }
+  }
+
+  const oldKey = tcShiftChartRuntime.hoverPoint
+    ? `${tcShiftChartRuntime.hoverPoint.series}-${tcShiftChartRuntime.hoverPoint.rowIndex}-${tcShiftChartRuntime.hoverPoint.shiftTimeMs}`
+    : null;
+
+  const newKey = nearest
+    ? `${nearest.series}-${nearest.rowIndex}-${nearest.shiftTimeMs}`
+    : null;
+
+  if (oldKey !== newKey) {
+    tcShiftChartRuntime.hoverPoint = nearest;
+    drawTcShiftChart();
+  }
+}
+
+function handleTcShiftChartMouseLeave() {
+  if (tcShiftChartRuntime.hoverPoint) {
+    tcShiftChartRuntime.hoverPoint = null;
+    drawTcShiftChart();
   }
 }
 
@@ -901,6 +965,7 @@ function drawTcShiftChart() {
   const height = canvas.height;
 
   ctx.clearRect(0, 0, width, height);
+  tcShiftChartRuntime.interactivePoints = [];
 
   if (!rows.length) {
     ctx.fillStyle = "#777";
@@ -909,13 +974,14 @@ function drawTcShiftChart() {
     return;
   }
 
-  const padding = { left: 70, right: 30, top: 30, bottom: 55 };
+  const padding = { left: 78, right: 30, top: 30, bottom: 68 };
   const plotWidth = width - padding.left - padding.right;
   const plotHeight = height - padding.top - padding.bottom;
 
   let dataY = [];
   let dataX = [];
-  let xValues = [];
+  let xAxisType = "numeric";
+  let xAxisTitle = "Angle";
   let xLabelFormatter = (v) => String(v);
 
   if (tcShiftToolState.chartMode === "all-angle") {
@@ -923,28 +989,71 @@ function drawTcShiftChart() {
 
     dataY = filtered
       .filter((row) => row.yShift !== "")
-      .map((row) => ({ x: Number(row.angle), y: Number(row.yShift) }));
+      .map((row, index) => ({
+        x: Number(row.angle),
+        y: Number(row.yShift),
+        rowIndex: index,
+        shiftTimeMs: row.shiftTimeMs,
+        shiftTimestamp: row.shiftTimestamp,
+        angle: row.angle,
+        yShift: row.yShift,
+        xShift: row.xShift,
+        series: "Y"
+      }));
 
     dataX = filtered
       .filter((row) => row.xShift !== "")
-      .map((row) => ({ x: Number(row.angle), y: Number(row.xShift) }));
+      .map((row, index) => ({
+        x: Number(row.angle),
+        y: Number(row.xShift),
+        rowIndex: index,
+        shiftTimeMs: row.shiftTimeMs,
+        shiftTimestamp: row.shiftTimestamp,
+        angle: row.angle,
+        yShift: row.yShift,
+        xShift: row.xShift,
+        series: "X"
+      }));
 
-    xValues = filtered.map((row) => Number(row.angle));
-    xLabelFormatter = (v) => `${v}°`;
+    xAxisType = "numeric";
+    xAxisTitle = "Angle";
+    xLabelFormatter = (v) => `${trimTrailingZeros(v)}°`;
   } else {
     const targetAngle = Number(tcShiftToolState.chartAngle);
     const filtered = rows.filter((row) => Number(row.angle) === targetAngle);
+    const sameDayMode = isSameDayRange(filtered.map((row) => row.shiftTimeMs));
 
     dataY = filtered
       .filter((row) => row.yShift !== "")
-      .map((row, index) => ({ x: index + 1, y: Number(row.yShift), time: row.time }));
+      .map((row, index) => ({
+        x: row.shiftTimeMs,
+        y: Number(row.yShift),
+        rowIndex: index,
+        shiftTimeMs: row.shiftTimeMs,
+        shiftTimestamp: row.shiftTimestamp,
+        angle: row.angle,
+        yShift: row.yShift,
+        xShift: row.xShift,
+        series: "Y"
+      }));
 
     dataX = filtered
       .filter((row) => row.xShift !== "")
-      .map((row, index) => ({ x: index + 1, y: Number(row.xShift), time: row.time }));
+      .map((row, index) => ({
+        x: row.shiftTimeMs,
+        y: Number(row.xShift),
+        rowIndex: index,
+        shiftTimeMs: row.shiftTimeMs,
+        shiftTimestamp: row.shiftTimestamp,
+        angle: row.angle,
+        yShift: row.yShift,
+        xShift: row.xShift,
+        series: "X"
+      }));
 
-    xValues = filtered.map((_, index) => index + 1);
-    xLabelFormatter = (v) => `#${v}`;
+    xAxisType = "time";
+    xAxisTitle = "Time";
+    xLabelFormatter = (v) => formatSmartTimeLabel(v, sameDayMode);
   }
 
   const combined = [];
@@ -958,10 +1067,20 @@ function drawTcShiftChart() {
     return;
   }
 
-  const minX = Math.min(...combined.map((p) => p.x));
-  const maxX = Math.max(...combined.map((p) => p.x));
+  let minX = Math.min(...combined.map((p) => p.x));
+  let maxX = Math.max(...combined.map((p) => p.x));
   let minY = Math.min(...combined.map((p) => p.y));
   let maxY = Math.max(...combined.map((p) => p.y));
+
+  if (minX === maxX) {
+    if (xAxisType === "time") {
+      minX -= 1000;
+      maxX += 1000;
+    } else {
+      minX -= 1;
+      maxX += 1;
+    }
+  }
 
   if (minY === maxY) {
     minY -= 1;
@@ -973,7 +1092,6 @@ function drawTcShiftChart() {
   maxY += yPadding;
 
   function mapX(value) {
-    if (maxX === minX) return padding.left + plotWidth / 2;
     return padding.left + ((value - minX) / (maxX - minX)) * plotWidth;
   }
 
@@ -981,41 +1099,81 @@ function drawTcShiftChart() {
     return padding.top + (1 - (value - minY) / (maxY - minY)) * plotHeight;
   }
 
-  drawChartGrid(ctx, padding, plotWidth, plotHeight, minX, maxX, minY, maxY, xLabelFormatter);
+  drawChartGrid(ctx, {
+    padding,
+    plotWidth,
+    plotHeight,
+    minX,
+    maxX,
+    minY,
+    maxY,
+    xLabelFormatter,
+    xAxisType
+  });
 
   if (tcShiftToolState.chartShowY) {
-    drawSeries(ctx, dataY, mapX, mapY, "#f59e0b", tcShiftToolState.chartMode === "single-angle");
+    const yPoints = drawSeries(
+      ctx,
+      dataY,
+      mapX,
+      mapY,
+      "#f59e0b",
+      tcShiftToolState.chartMode === "single-angle"
+    );
+    tcShiftChartRuntime.interactivePoints.push(...yPoints);
   }
 
   if (tcShiftToolState.chartShowX) {
-    drawSeries(ctx, dataX, mapX, mapY, "#3b82f6", tcShiftToolState.chartMode === "single-angle");
+    const xPoints = drawSeries(
+      ctx,
+      dataX,
+      mapX,
+      mapY,
+      "#3b82f6",
+      tcShiftToolState.chartMode === "single-angle"
+    );
+    tcShiftChartRuntime.interactivePoints.push(...xPoints);
   }
 
   drawChartAxes(ctx, padding, plotWidth, plotHeight);
 
   ctx.fillStyle = "#555";
   ctx.font = "13px Segoe UI";
-  ctx.fillText(
-    tcShiftToolState.chartMode === "all-angle" ? "Angle" : "Time Sequence",
-    padding.left + plotWidth / 2 - 30,
-    height - 16
-  );
+  ctx.textAlign = "center";
+  ctx.fillText(xAxisTitle, padding.left + plotWidth / 2, height - 18);
 
   ctx.save();
-  ctx.translate(18, padding.top + plotHeight / 2 + 20);
+  ctx.translate(20, padding.top + plotHeight / 2 + 20);
   ctx.rotate(-Math.PI / 2);
   ctx.fillText("Shift", 0, 0);
   ctx.restore();
+
+  if (tcShiftChartRuntime.hoverPoint) {
+    drawHoveredPoint(ctx, tcShiftChartRuntime.hoverPoint);
+    drawChartTooltip(ctx, tcShiftChartRuntime.hoverPoint, width, height);
+  }
 }
 
-function drawChartGrid(ctx, padding, plotWidth, plotHeight, minX, maxX, minY, maxY, xLabelFormatter) {
+function drawChartGrid(ctx, config) {
+  const {
+    padding,
+    plotWidth,
+    plotHeight,
+    minX,
+    maxX,
+    minY,
+    maxY,
+    xLabelFormatter,
+    xAxisType
+  } = config;
+
   ctx.save();
 
   ctx.strokeStyle = "rgba(0,0,0,0.10)";
   ctx.lineWidth = 1;
   ctx.setLineDash([4, 4]);
 
-  const verticalLines = 6;
+  const verticalLines = xAxisType === "time" ? 7 : 6;
   const horizontalLines = 6;
 
   for (let i = 0; i <= verticalLines; i++) {
@@ -1026,11 +1184,18 @@ function drawChartGrid(ctx, padding, plotWidth, plotHeight, minX, maxX, minY, ma
     ctx.stroke();
 
     const value = minX + (i / verticalLines) * (maxX - minX);
+
     ctx.setLineDash([]);
     ctx.fillStyle = "#888";
     ctx.font = "12px Segoe UI";
     ctx.textAlign = "center";
-    ctx.fillText(xLabelFormatter(roundForAxis(value)), x, padding.top + plotHeight + 22);
+
+    if (xAxisType === "time") {
+      drawWrappedXAxisLabel(ctx, xLabelFormatter(value), x, padding.top + plotHeight + 20);
+    } else {
+      ctx.fillText(xLabelFormatter(roundForAxis(value)), x, padding.top + plotHeight + 22);
+    }
+
     ctx.setLineDash([4, 4]);
   }
 
@@ -1042,6 +1207,7 @@ function drawChartGrid(ctx, padding, plotWidth, plotHeight, minX, maxX, minY, ma
     ctx.stroke();
 
     const value = maxY - (i / horizontalLines) * (maxY - minY);
+
     ctx.setLineDash([]);
     ctx.fillStyle = "#888";
     ctx.font = "12px Segoe UI";
@@ -1051,6 +1217,17 @@ function drawChartGrid(ctx, padding, plotWidth, plotHeight, minX, maxX, minY, ma
   }
 
   ctx.restore();
+}
+
+function drawWrappedXAxisLabel(ctx, label, x, y) {
+  const parts = String(label).split("\n");
+  if (parts.length === 1) {
+    ctx.fillText(parts[0], x, y);
+    return;
+  }
+
+  ctx.fillText(parts[0], x, y - 7);
+  ctx.fillText(parts[1], x, y + 8);
 }
 
 function drawChartAxes(ctx, padding, plotWidth, plotHeight) {
@@ -1069,7 +1246,9 @@ function drawChartAxes(ctx, padding, plotWidth, plotHeight) {
 }
 
 function drawSeries(ctx, data, mapX, mapY, color, connectLine) {
-  if (!data.length) return;
+  if (!data.length) return [];
+
+  const points = [];
 
   ctx.save();
 
@@ -1087,16 +1266,149 @@ function drawSeries(ctx, data, mapX, mapY, color, connectLine) {
   }
 
   data.forEach((point) => {
-    const x = mapX(point.x);
-    const y = mapY(point.y);
+    const canvasX = mapX(point.x);
+    const canvasY = mapY(point.y);
 
     ctx.beginPath();
     ctx.fillStyle = color;
-    ctx.arc(x, y, 5, 0, Math.PI * 2);
+    ctx.arc(canvasX, canvasY, 5, 0, Math.PI * 2);
     ctx.fill();
+
+    points.push({
+      ...point,
+      canvasX,
+      canvasY,
+      color
+    });
   });
 
   ctx.restore();
+  return points;
+}
+
+function drawHoveredPoint(ctx, point) {
+  ctx.save();
+
+  ctx.beginPath();
+  ctx.strokeStyle = "#111";
+  ctx.lineWidth = 2;
+  ctx.arc(point.canvasX, point.canvasY, 8, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.fillStyle = "#ffffff";
+  ctx.arc(point.canvasX, point.canvasY, 3, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function drawChartTooltip(ctx, point, canvasWidth, canvasHeight) {
+  const lines = [
+    `Time: ${formatFullTimestamp(point.shiftTimeMs)}`,
+    `Angle: ${trimTrailingZeros(point.angle)}°`,
+    `Y shift: ${point.yShift === "" ? "--" : formatNumber(point.yShift, 6)}`,
+    `X shift: ${point.xShift === "" ? "--" : formatNumber(point.xShift, 6)}`
+  ];
+
+  ctx.save();
+  ctx.font = "12px Segoe UI";
+
+  let maxWidth = 0;
+  for (const line of lines) {
+    const width = ctx.measureText(line).width;
+    if (width > maxWidth) maxWidth = width;
+  }
+
+  const boxWidth = maxWidth + 20;
+  const boxHeight = lines.length * 18 + 16;
+
+  let boxX = point.canvasX + 12;
+  let boxY = point.canvasY - boxHeight - 12;
+
+  if (boxX + boxWidth > canvasWidth - 8) {
+    boxX = point.canvasX - boxWidth - 12;
+  }
+
+  if (boxY < 8) {
+    boxY = point.canvasY + 12;
+  }
+
+  if (boxY + boxHeight > canvasHeight - 8) {
+    boxY = canvasHeight - boxHeight - 8;
+  }
+
+  ctx.fillStyle = "rgba(20, 20, 20, 0.92)";
+  roundRect(ctx, boxX, boxY, boxWidth, boxHeight, 8);
+  ctx.fill();
+
+  ctx.fillStyle = "#fff";
+  ctx.textAlign = "left";
+
+  lines.forEach((line, index) => {
+    ctx.fillText(line, boxX + 10, boxY + 18 + index * 18);
+  });
+
+  ctx.restore();
+}
+
+function roundRect(ctx, x, y, width, height, radius) {
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + width - radius, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+  ctx.lineTo(x + width, y + height - radius);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  ctx.lineTo(x + radius, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
+}
+
+function isSameDayRange(timestamps) {
+  if (!timestamps.length) return true;
+
+  const valid = timestamps.filter((v) => Number.isFinite(v));
+  if (!valid.length) return true;
+
+  const first = new Date(Math.min(...valid));
+  const last = new Date(Math.max(...valid));
+
+  return (
+    first.getFullYear() === last.getFullYear() &&
+    first.getMonth() === last.getMonth() &&
+    first.getDate() === last.getDate()
+  );
+}
+
+function formatSmartTimeLabel(timestamp, sameDayMode) {
+  const d = new Date(timestamp);
+
+  if (sameDayMode) {
+    return `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+  }
+
+  return `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}\n${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+function formatFullTimestamp(timestamp) {
+  const d = new Date(timestamp);
+  return (
+    `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ` +
+    `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}.` +
+    `${String(d.getMilliseconds()).padStart(3, "0")}`
+  );
+}
+
+function pad2(value) {
+  return String(value).padStart(2, "0");
+}
+
+function trimTrailingZeros(value) {
+  const num = Number(value);
+  if (Number.isNaN(num)) return String(value);
+  return num.toFixed(6).replace(/\.?0+$/, "");
 }
 
 function roundForAxis(value) {
