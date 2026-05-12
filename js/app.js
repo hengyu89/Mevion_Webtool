@@ -1,6 +1,7 @@
 const state = {
   currentPageId: "home",
-  openParentId: null
+  openParentId: null,
+  sidebarCollapsed: true
 };
 
 function setPage(pageId) {
@@ -9,6 +10,8 @@ function setPage(pageId) {
   const parentId = findParentIdByChildId(pageId);
   if (parentId) {
     state.openParentId = parentId;
+  } else {
+    state.openParentId = null;
   }
 
   renderMenu(state.currentPageId, state.openParentId);
@@ -20,6 +23,30 @@ function setPage(pageId) {
 function toggleParentMenu(parentId) {
   state.openParentId = state.openParentId === parentId ? null : parentId;
   renderMenu(state.currentPageId, state.openParentId);
+}
+
+function applySidebarState() {
+  const appShell = document.getElementById("appShell");
+  const toggleBtn = document.getElementById("menuToggleBtn");
+  if (!appShell) return;
+
+  appShell.classList.toggle("sidebar-collapsed", state.sidebarCollapsed);
+  appShell.classList.toggle("sidebar-expanded", !state.sidebarCollapsed);
+
+  if (toggleBtn) {
+    toggleBtn.setAttribute("aria-expanded", String(!state.sidebarCollapsed));
+    toggleBtn.title = state.sidebarCollapsed ? "展开菜单" : "收起菜单";
+  }
+}
+
+function bindSidebarToggle() {
+  const toggleBtn = document.getElementById("menuToggleBtn");
+  if (!toggleBtn) return;
+
+  toggleBtn.addEventListener("click", () => {
+    state.sidebarCollapsed = !state.sidebarCollapsed;
+    applySidebarState();
+  });
 }
 
 function bindMenuEvents() {
@@ -37,7 +64,13 @@ function bindMenuEvents() {
       const menuItem = menuData.find((item) => item.id === pageId);
 
       if (menuItem && menuItem.children) {
-        toggleParentMenu(pageId);
+        const willOpen = state.openParentId !== pageId;
+        state.currentPageId = pageId;
+        state.openParentId = willOpen ? pageId : null;
+        renderMenu(state.currentPageId, state.openParentId);
+        renderMainContent(state.currentPageId);
+        renderSideContent(state.currentPageId);
+        initPageModule(state.currentPageId);
         return;
       }
 
@@ -72,6 +105,8 @@ function initPageModule(pageId) {
 document.addEventListener("DOMContentLoaded", () => {
   initBackgroundFallback();
   bindMenuEvents();
+  bindSidebarToggle();
+  applySidebarState();
   setPage(state.currentPageId);
   console.log("App initialized");
 });

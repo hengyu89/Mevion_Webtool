@@ -58,6 +58,29 @@ function renderMainContent(pageId) {
       `;
     }
 
+    if (section.type === "toolLinks") {
+      html += `
+        <section class="card section-card feature-section-card">
+          <h2 class="section-title">${section.title}</h2>
+          <div class="feature-link-grid">
+            ${(section.items || [])
+              .map(
+                (item) => `
+                  <button class="feature-link-card" type="button" data-page-id="${item.pageId}">
+                    <span class="feature-link-text">
+                      <span class="feature-link-title">${item.label}</span>
+                      <span class="feature-link-desc">${item.desc || ""}</span>
+                    </span>
+                    <span class="feature-link-icon" aria-hidden="true">${item.icon || "›"}</span>
+                  </button>
+                `
+              )
+              .join("")}
+          </div>
+        </section>
+      `;
+    }
+
     if (section.type === "custom") {
       html += `
         <section class="card section-card">
@@ -69,6 +92,17 @@ function renderMainContent(pageId) {
   });
 
   mainContent.innerHTML = html;
+  bindMainContentNavigation(mainContent);
+}
+
+function bindMainContentNavigation(mainContent) {
+  mainContent.querySelectorAll("[data-page-id]").forEach((item) => {
+    item.addEventListener("click", () => {
+      if (typeof setPage === "function") {
+        setPage(item.dataset.pageId);
+      }
+    });
+  });
 }
 
 function renderSideContent(pageId) {

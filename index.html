@@ -8,10 +8,15 @@
 </head>
 <body>
   <div class="page-bg">
-    <div class="app-shell">
-      <!-- 左侧菜单 -->
-      <aside class="left-sidebar">
-        <div class="logo-card card">
+    <div id="appShell" class="app-shell service-shell sidebar-collapsed">
+      <aside id="leftSidebar" class="left-sidebar service-sidebar">
+        <button id="menuToggleBtn" class="menu-toggle-btn" type="button" title="展开/收起菜单" aria-label="展开/收起菜单">
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+
+        <div class="logo-card card service-logo-card">
           <div class="logo-title">MEVION</div>
           <div class="logo-subtitle">Webtool</div>
         </div>
@@ -19,15 +24,9 @@
         <nav id="menuContainer" class="menu-list"></nav>
       </aside>
 
-      <!-- 中间主内容 -->
-      <main class="main-content">
-        <div id="mainContent"></div>
+      <main class="main-content service-main">
+        <div id="mainContent" class="service-main-content"></div>
       </main>
-
-      <!-- 右侧附带内容 -->
-      <aside class="right-panel">
-        <div id="sideContent"></div>
-      </aside>
     </div>
   </div>
 

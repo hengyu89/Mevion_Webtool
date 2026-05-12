@@ -1122,3 +1122,1251 @@ body {
 .time-exclude-actions .tool-btn {
   white-space: nowrap; /* ❗防止按钮被拆行 */
 }
+/* =========================================================
+   Service Mode compact UI override
+   目标：保留背景毛玻璃，但把内部改成高密度工程软件界面。
+   ========================================================= */
+:root {
+  --svc-bg: #d7d7d7;
+  --svc-panel: #eeeeee;
+  --svc-panel-light: #f8f8f8;
+  --svc-panel-dark: #bcbcbc;
+  --svc-border-hi: #ffffff;
+  --svc-border-lo: #9f9f9f;
+  --svc-border-mid: #b8b8b8;
+  --svc-text: #111;
+  --svc-muted: #555;
+  --svc-blue: #2b5f8f;
+  --svc-green: #17a84a;
+  --svc-red: #b01818;
+  --svc-yellow: #f0d34e;
+  --svc-control: #ffffff;
+  --svc-readonly: #c4c4c4;
+}
+
+html,
+body {
+  font-size: 12px;
+  color: var(--svc-text);
+}
+
+.page-bg {
+  padding: 12px;
+}
+
+.app-shell.service-shell {
+  max-width: none;
+  min-height: calc(100vh - 24px);
+  padding: 6px;
+  border-radius: 10px;
+  background: rgba(216, 216, 216, 0.76);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 6px;
+  transition: grid-template-columns 0.16s ease;
+}
+
+.app-shell.service-shell.sidebar-expanded {
+  grid-template-columns: 190px minmax(0, 1fr);
+}
+
+.service-sidebar {
+  min-width: 0;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 6px;
+  background: var(--svc-bg);
+  box-shadow:
+    inset 1px 1px 0 var(--svc-border-hi),
+    inset -1px -1px 0 var(--svc-border-lo);
+  overflow: hidden;
+}
+
+.menu-toggle-btn {
+  width: 30px;
+  height: 28px;
+  margin: 0 auto;
+  padding: 5px;
+  border: 1px solid var(--svc-border-lo);
+  border-top-color: var(--svc-border-hi);
+  border-left-color: var(--svc-border-hi);
+  background: linear-gradient(#eeeeee, #cfcfcf);
+  cursor: pointer;
+}
+
+.menu-toggle-btn span {
+  display: block;
+  height: 2px;
+  margin: 3px 2px;
+  background: #333;
+}
+
+.service-logo-card,
+.logo-card.card {
+  padding: 8px 6px;
+  border-radius: 4px;
+  background: var(--svc-panel-light);
+  box-shadow:
+    inset 1px 1px 0 var(--svc-border-hi),
+    inset -1px -1px 0 var(--svc-border-lo);
+  text-align: center;
+}
+
+.logo-title {
+  font-size: 1.35rem;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+.logo-subtitle {
+  margin-top: 2px;
+  font-size: 0.8rem;
+}
+
+.sidebar-collapsed .service-logo-card,
+.sidebar-collapsed .menu-list {
+  display: none;
+}
+
+.menu-list,
+.menu-group,
+.submenu-list {
+  gap: 4px;
+}
+
+.menu-item,
+.submenu-item {
+  min-height: 26px;
+  padding: 5px 8px;
+  border-radius: 2px;
+  border: 1px solid var(--svc-border-lo);
+  border-top-color: var(--svc-border-hi);
+  border-left-color: var(--svc-border-hi);
+  background: #e7e7e7;
+  box-shadow: none;
+  font-size: 0.92rem;
+  font-weight: 600;
+  transition: none;
+}
+
+.submenu-item {
+  padding-left: 18px;
+  font-size: 0.88rem;
+}
+
+.menu-item:hover,
+.submenu-item:hover {
+  transform: none;
+  box-shadow: none;
+  background: #f5f5f5;
+}
+
+.menu-item.active,
+.submenu-item.active,
+.menu-item.parent-open {
+  background: #d8e7f6;
+  outline: none;
+  color: #000;
+  box-shadow:
+    inset 1px 1px 0 var(--svc-border-hi),
+    inset -1px -1px 0 var(--svc-blue);
+}
+
+.service-main {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 6px;
+}
+
+.service-main-content,
+.service-side-content {
+  min-width: 0;
+}
+
+.card,
+.hero-card,
+.section-card,
+.side-card,
+.chart-section-card,
+.tool-file-list,
+.column-toggle-panel,
+.time-exclude-panel,
+.summary-card,
+.info-tile,
+.side-list-item,
+.mini-stat-card,
+.calc-result-card {
+  border-radius: 3px !important;
+  background: var(--svc-panel) !important;
+  box-shadow:
+    inset 1px 1px 0 var(--svc-border-hi),
+    inset -1px -1px 0 var(--svc-border-lo) !important;
+}
+
+.hero-card {
+  min-height: 72px;
+  padding: 8px 10px;
+  color: #111;
+  background: var(--svc-panel) !important;
+}
+
+.hero-tag {
+  font-size: 0.82rem;
+  color: var(--svc-muted);
+  margin-bottom: 2px;
+}
+
+.hero-title {
+  font-size: 1.18rem;
+  line-height: 1.2;
+}
+
+.hero-desc {
+  margin-top: 4px;
+  font-size: 0.88rem;
+  line-height: 1.4;
+  color: #333;
+}
+
+.main-content,
+.tool-block,
+.left-sidebar,
+.right-panel {
+  gap: 6px;
+}
+
+.section-card,
+.side-card,
+.chart-section-card {
+  padding: 8px;
+}
+
+.section-title,
+.side-card-title {
+  margin: 0 0 6px;
+  padding: 2px 4px;
+  font-size: 0.95rem;
+  font-weight: 800;
+  background: #d1d1d1;
+  border-bottom: 1px solid var(--svc-border-lo);
+}
+
+.content-text,
+.side-list-item,
+.empty-text {
+  line-height: 1.35;
+  font-size: 0.88rem;
+}
+
+.file-drop-zone {
+  padding: 12px;
+  border-radius: 3px;
+  background: var(--svc-panel) !important;
+  border: 1px dashed var(--svc-border-lo);
+}
+
+.file-drop-title {
+  font-size: 1rem;
+}
+
+.file-drop-subtitle {
+  margin-top: 4px;
+  font-size: 0.85rem;
+}
+
+.tool-actions,
+.summary-row,
+.bulk-action-row,
+.chart-toolbar,
+.table-pagination {
+  gap: 6px;
+}
+
+.tool-btn,
+.pagination-btn,
+.secondary-btn,
+.warn-btn {
+  min-height: 24px;
+  padding: 4px 10px;
+  border-radius: 2px;
+  border: 1px solid var(--svc-border-lo);
+  border-top-color: var(--svc-border-hi);
+  border-left-color: var(--svc-border-hi);
+  background: linear-gradient(#f8f8f8, #d0d0d0);
+  box-shadow: none;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.tool-btn:hover {
+  transform: none;
+  background: #ffffff;
+}
+
+.tool-btn:disabled {
+  color: #777;
+  background: #c7c7c7;
+}
+
+.calc-input,
+.page-jump-input,
+.time-range-input,
+select {
+  min-height: 22px;
+  padding: 2px 5px;
+  border-radius: 2px;
+  border: 1px solid var(--svc-border-lo);
+  border-top-color: #777;
+  border-left-color: #777;
+  background: var(--svc-control);
+  box-shadow: inset 1px 1px 2px rgba(0, 0, 0, 0.12);
+  font-size: 0.88rem;
+}
+
+input[readonly],
+.readonly-input,
+.value-readonly,
+.mini-stat-value {
+  background: var(--svc-readonly);
+}
+
+.tool-table-wrap {
+  overflow: auto;
+  border-radius: 3px;
+  background: var(--svc-panel);
+  box-shadow:
+    inset 1px 1px 0 var(--svc-border-hi),
+    inset -1px -1px 0 var(--svc-border-lo);
+}
+
+.tool-table {
+  font-size: 0.86rem;
+  border-radius: 0;
+  background: #f3f3f3;
+}
+
+.tool-table th,
+.tool-table td {
+  padding: 3px 6px;
+  border-bottom: 1px solid #c5c5c5;
+  border-right: 1px solid #c5c5c5;
+}
+
+.tool-table th {
+  background: #d5d5d5;
+  font-weight: 800;
+}
+
+.tool-table tbody tr:hover {
+  background: #eef6ff;
+}
+
+.shift-danger {
+  color: var(--svc-red);
+}
+
+.side-stats-grid,
+.info-grid {
+  gap: 4px;
+}
+
+.mini-stat-card,
+.summary-card,
+.info-tile,
+.calc-result-card {
+  padding: 5px 6px;
+}
+
+.mini-stat-label,
+.info-tile-label {
+  font-size: 0.76rem;
+  color: var(--svc-muted);
+}
+
+.mini-stat-value,
+.info-tile-value {
+  margin-top: 2px;
+  padding: 2px 4px;
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.chart-canvas-wrap,
+canvas {
+  background: #eeeeee;
+}
+
+@media (max-width: 1200px) {
+  .app-shell.service-shell,
+  .app-shell.service-shell.sidebar-expanded {
+    grid-template-columns: 42px minmax(0, 1fr);
+  }
+
+  .app-shell.service-shell.sidebar-expanded {
+    grid-template-columns: 180px minmax(0, 1fr);
+  }
+
+  .service-main {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .page-bg {
+    padding: 6px;
+  }
+
+  .app-shell.service-shell,
+  .app-shell.service-shell.sidebar-expanded {
+    min-height: calc(100vh - 12px);
+    grid-template-columns: 1fr;
+  }
+
+  .service-sidebar {
+    min-height: 34px;
+  }
+
+  .sidebar-collapsed .service-logo-card,
+  .sidebar-collapsed .menu-list {
+    display: none;
+  }
+}
+
+/* ===== Service UI step 2: left menu changed to old Service Mode tab style ===== */
+.app-shell.service-shell {
+  gap: 0;
+}
+
+.service-sidebar {
+  position: relative;
+  z-index: 2;
+  padding: 4px 0 4px 4px;
+  border-radius: 4px 0 0 4px;
+  background: #d6d6d6;
+  box-shadow:
+    inset 1px 1px 0 #ffffff,
+    inset -1px -1px 0 #8f8f8f;
+}
+
+.service-main {
+  position: relative;
+  z-index: 1;
+  padding: 4px;
+  background: #eeeeee;
+  border: 1px solid #9b9b9b;
+  border-left: 0;
+  box-shadow:
+    inset 1px 1px 0 #ffffff,
+    inset -1px -1px 0 #9a9a9a;
+}
+
+.menu-toggle-btn {
+  display: block;
+  margin: 0 5px 6px auto;
+  background: linear-gradient(#f2f2f2, #c9c9c9);
+}
+
+.service-logo-card,
+.logo-card.card {
+  margin: 0 5px 8px 0;
+  background: #eeeeee !important;
+}
+
+.menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.menu-group {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0 0 2px 0;
+}
+
+.menu-item,
+.submenu-item {
+  position: relative;
+  min-height: 25px;
+  margin: 0 5px 0 0;
+  padding: 4px 8px;
+  border-radius: 3px 0 0 3px;
+  border: 1px solid #9b9b9b;
+  border-top-color: #ffffff;
+  border-left-color: #ffffff;
+  border-right-color: #8c8c8c;
+  border-bottom-color: #8c8c8c;
+  background: linear-gradient(#d3d3d3, #bcbcbc);
+  box-shadow: none;
+  color: #111;
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.15;
+  text-align: left;
+}
+
+.menu-item:hover,
+.submenu-item:hover {
+  background: linear-gradient(#e0e0e0, #c7c7c7);
+}
+
+.menu-item.active,
+.menu-item.parent-open,
+.submenu-item.active {
+  z-index: 3;
+  margin-right: -1px;
+  background: #eeeeee;
+  border-right-color: #eeeeee;
+  border-bottom-color: #9b9b9b;
+  box-shadow:
+    inset 1px 1px 0 #ffffff,
+    inset 0 -1px 0 #b5b5b5;
+  color: #000;
+  outline: none;
+}
+
+.menu-item.active::after,
+.menu-item.parent-open::after,
+.submenu-item.active::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  right: -2px;
+  width: 3px;
+  height: calc(100% - 2px);
+  background: #eeeeee;
+}
+
+.submenu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 1px 0 2px 12px;
+  padding: 0;
+  border-left: 1px solid #9e9e9e;
+}
+
+.submenu-item {
+  min-height: 23px;
+  padding-left: 8px;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.sidebar-collapsed .service-sidebar {
+  padding-right: 4px;
+}
+
+.sidebar-collapsed .menu-toggle-btn {
+  margin: 0 auto;
+}
+
+.sidebar-collapsed .service-main {
+  border-left: 1px solid #9b9b9b;
+}
+
+/* Step 5: TC Shift compact service layout adjustments */
+.tc-file-status {
+  min-height: 28px;
+  padding: 7px 10px;
+  border: 1px solid #b6b6b6;
+  background: #eeeeee;
+  color: #333;
+  font-weight: 700;
+}
+
+.tc-file-status.running {
+  background: #fff7d7;
+}
+
+.tc-file-status.done {
+  background: #e8f3e8;
+}
+
+.tc-file-status.error {
+  background: #f6dddd;
+  color: #8b1f1f;
+}
+
+.tool-actions:empty {
+  display: none;
+}
+
+.tc-shift-data-table {
+  table-layout: fixed;
+  width: auto;
+  min-width: 760px;
+  max-width: 980px;
+}
+
+.tc-shift-data-table .select-col {
+  width: 34px;
+  text-align: center;
+}
+
+.tc-shift-data-table th:nth-child(2),
+.tc-shift-data-table td:nth-child(2) {
+  width: 112px;
+}
+
+.tc-shift-data-table th:nth-child(3),
+.tc-shift-data-table td:nth-child(3) {
+  width: 112px;
+}
+
+.tc-shift-data-table th:nth-child(4),
+.tc-shift-data-table td:nth-child(4) {
+  width: 82px;
+}
+
+.tc-shift-data-table th:nth-child(5),
+.tc-shift-data-table td:nth-child(5),
+.tc-shift-data-table th:nth-child(6),
+.tc-shift-data-table td:nth-child(6) {
+  width: 112px;
+}
+
+.tc-shift-data-table th:nth-child(7),
+.tc-shift-data-table td:nth-child(7) {
+  width: 92px;
+}
+
+.tc-shift-data-table tbody tr.selectable-data-row {
+  cursor: pointer;
+}
+
+.tc-shift-data-table tbody tr.selectable-data-row:hover {
+  background: #dfe9f4;
+}
+
+.tc-shift-data-table tbody tr.row-selected,
+.tc-shift-data-table tbody tr.row-selected:hover {
+  background: #cfe0ef;
+}
+
+/* Step 6: TC Shift toolbar/time/table refinements */
+.tc-control-row {
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.tc-data-count {
+  min-width: auto;
+  white-space: nowrap;
+  padding: 6px 10px;
+  font-size: 0.92rem;
+}
+
+.time-exclude-row {
+  align-items: center;
+}
+
+.time-range-inline {
+  align-items: center;
+  min-height: 38px;
+}
+
+.time-range-input {
+  width: 142px;
+  min-width: 142px;
+  height: 24px;
+  min-height: 24px;
+  padding: 2px 6px;
+}
+
+.time-range-separator {
+  align-self: center;
+  line-height: 24px;
+}
+
+.compact-time-btn,
+.time-exclude-actions .compact-time-btn {
+  min-height: 24px;
+  height: 24px;
+  padding: 2px 10px;
+  line-height: 18px;
+}
+
+.tc-shift-data-table {
+  table-layout: fixed;
+  width: 568px;
+  min-width: 568px;
+  max-width: 568px;
+}
+
+.tc-shift-data-table .select-col {
+  width: 30px;
+}
+
+.tc-shift-data-table th:nth-child(2),
+.tc-shift-data-table td:nth-child(2) {
+  width: 96px;
+}
+
+.tc-shift-data-table th:nth-child(3),
+.tc-shift-data-table td:nth-child(3) {
+  width: 96px;
+}
+
+.tc-shift-data-table th:nth-child(4),
+.tc-shift-data-table td:nth-child(4) {
+  width: 72px;
+}
+
+.tc-shift-data-table th:nth-child(5),
+.tc-shift-data-table td:nth-child(5),
+.tc-shift-data-table th:nth-child(6),
+.tc-shift-data-table td:nth-child(6) {
+  width: 96px;
+}
+
+.tc-shift-data-table th:nth-child(7),
+.tc-shift-data-table td:nth-child(7) {
+  width: 82px;
+}
+
+.tc-shift-data-table td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tc-shift-data-table tbody tr.excluded-row,
+.tc-shift-data-table tbody tr.excluded-row:hover {
+  background: #efd0d0;
+  color: #7d5d5d;
+}
+
+.tc-shift-data-table tbody tr.excluded-row td,
+.tc-shift-data-table tbody tr.excluded-row .shift-cell {
+  font-weight: 400;
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.tc-shift-data-table tbody tr.excluded-row .row-status-badge {
+  text-decoration: none;
+}
+
+/* Step 7: TC Shift progress, drag-select, compact toolbar */
+.tc-control-row {
+  align-items: center;
+  gap: 5px;
+}
+
+.tc-data-count,
+.compact-column-toggle-panel {
+  min-height: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.tc-data-count {
+  padding: 4px 9px;
+}
+
+.compact-column-toggle-panel {
+  padding: 3px 8px;
+  gap: 12px;
+}
+
+.compact-column-toggle-panel .column-toggle-item {
+  min-height: 22px;
+  line-height: 22px;
+}
+
+.top-pagination {
+  margin-top: 0;
+  margin-left: auto;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.compact-pagination-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+.compact-page-jump-input,
+.page-jump-input.compact-page-jump-input {
+  width: 42px;
+  min-width: 42px;
+  height: 24px;
+  min-height: 24px;
+  margin: 0;
+  padding: 2px 4px;
+}
+
+.top-pagination .pagination-btn {
+  min-width: 58px;
+  height: 24px;
+  min-height: 24px;
+  padding: 2px 8px;
+}
+
+.time-range-inline {
+  min-height: 30px;
+  height: 30px;
+  padding: 3px 5px;
+}
+
+.time-range-input {
+  width: 108px;
+  min-width: 108px;
+  height: 22px;
+  min-height: 22px;
+  padding: 1px 5px;
+}
+
+.time-range-separator {
+  line-height: 22px;
+  padding: 0 6px;
+}
+
+.compact-time-btn,
+.time-exclude-actions .compact-time-btn {
+  height: 22px;
+  min-height: 22px;
+  padding: 1px 8px;
+  line-height: 18px;
+}
+
+.drag-select-box {
+  position: absolute;
+  z-index: 9999;
+  pointer-events: none;
+  border: 1px solid #2f6f9f;
+  background: rgba(95, 150, 200, 0.18);
+}
+
+.tc-shift-data-table,
+.tc-shift-data-table * {
+  user-select: none;
+}
+
+/* Step 8: TC Shift simplified toolbar and tighter hero */
+.hero-card {
+  min-height: auto !important;
+  padding: 5px 8px !important;
+  justify-content: flex-start !important;
+}
+
+.hero-title {
+  font-size: 1.05rem !important;
+  line-height: 1.1 !important;
+}
+
+.hero-desc {
+  margin-top: 3px !important;
+  font-size: 0.78rem !important;
+  line-height: 1.25 !important;
+}
+
+.hero-tag:empty {
+  display: none !important;
+}
+
+.tc-edit-action-group .tool-btn,
+.top-pagination .pagination-btn {
+  min-height: 24px;
+  height: 24px;
+  padding: 2px 8px;
+  line-height: 18px;
+}
+
+.compact-page-jump-input,
+.page-jump-input.compact-page-jump-input {
+  width: 34px;
+  min-width: 34px;
+}
+
+.time-exclude-row,
+.time-exclude-panel {
+  display: none !important;
+}
+
+
+/* Step 9: compact persistent offset parameters */
+.offset-section-card .calc-form-grid.single-col {
+  gap: 6px;
+}
+
+.offset-section-card .calc-field {
+  gap: 3px;
+}
+
+.offset-param-input,
+.narrow-input.offset-param-input {
+  width: 86px;
+  max-width: 86px;
+  min-width: 86px;
+  height: 24px;
+  min-height: 24px;
+  padding: 2px 5px;
+}
+
+.offset-result-card {
+  margin-top: 6px !important;
+  border: 1px solid #777 !important;
+  background: linear-gradient(#efefef, #dcdcdc) !important;
+  box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 #9a9a9a !important;
+}
+
+.offset-result-label {
+  color: #222 !important;
+  font-weight: 800 !important;
+}
+
+.offset-result-value {
+  margin-top: 4px !important;
+  padding: 6px 8px !important;
+  font-size: 1.18rem !important;
+  font-weight: 900 !important;
+  color: #000 !important;
+  background: #b8b8b8 !important;
+  border: 1px inset #9a9a9a !important;
+  letter-spacing: 0.3px;
+}
+
+
+/* Step 10: move TC stats/offset into tool workspace and remove global right pane */
+.service-main {
+  display: block !important;
+  min-width: 0;
+}
+
+.service-main-content {
+  min-width: 0;
+  width: 100%;
+}
+
+.service-side-content {
+  display: none !important;
+}
+
+.tool-table-wrap {
+  overflow: visible;
+}
+
+.tc-table-stats-layout {
+  display: grid;
+  grid-template-columns: max-content 250px;
+  align-items: start;
+  gap: 6px;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.tc-table-area {
+  min-width: 0;
+  width: max-content;
+  max-width: calc(100vw - 42px - 250px - 48px);
+  overflow: auto;
+}
+
+.sidebar-expanded .tc-table-area {
+  max-width: calc(100vw - 190px - 250px - 48px);
+}
+
+.tc-inline-stats-panel {
+  width: 250px;
+  min-width: 250px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tc-inline-stats-panel .side-card {
+  margin: 0 !important;
+  padding: 6px !important;
+}
+
+.tc-inline-stats-panel .side-card-title {
+  margin: 0 0 5px !important;
+  padding: 3px 5px !important;
+  background: #cfcfcf;
+  border-bottom: 1px solid #999;
+  font-size: 0.9rem !important;
+  line-height: 1.1;
+}
+
+.tc-inline-stats-panel .side-stats-grid {
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+  margin-top: 0;
+}
+
+.tc-inline-stats-panel .mini-stat-card {
+  padding: 5px !important;
+}
+
+.tc-inline-stats-panel .mini-stat-label {
+  font-size: 0.72rem !important;
+  line-height: 1.1;
+}
+
+.tc-inline-stats-panel .mini-stat-value {
+  margin-top: 3px !important;
+  padding: 3px 5px;
+  font-size: 0.82rem !important;
+  line-height: 1.15;
+}
+
+.tc-inline-stats-panel .calc-form-grid.single-col {
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 8px;
+}
+
+.tc-inline-stats-panel .calc-field {
+  gap: 3px;
+  font-size: 0.78rem !important;
+}
+
+.tc-inline-stats-panel .offset-param-input,
+.tc-inline-stats-panel .narrow-input.offset-param-input {
+  width: 82px;
+  min-width: 82px;
+  max-width: 82px;
+}
+
+.tc-inline-stats-panel .calc-result-wrap {
+  margin-top: 8px !important;
+  gap: 6px !important;
+}
+
+.tc-inline-stats-panel .offset-result-value {
+  font-size: 1.05rem !important;
+  padding: 5px 7px !important;
+}
+
+.tc-empty-table-with-stats {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) 250px;
+  gap: 6px;
+}
+
+@media (max-width: 1100px) {
+  .tc-table-stats-layout,
+  .tc-empty-table-with-stats {
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+
+  .tc-table-area {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .tc-inline-stats-panel {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+/* Step 11: separate inline analysis panel from table and improve sticky behavior */
+.tc-table-stats-layout {
+  grid-template-columns: max-content 268px;
+  gap: 20px;
+  align-items: start;
+}
+
+.tc-table-area {
+  max-width: calc(100vw - 42px - 268px - 72px);
+}
+
+.sidebar-expanded .tc-table-area {
+  max-width: calc(100vw - 190px - 268px - 72px);
+}
+
+.tc-inline-stats-panel {
+  width: 268px;
+  min-width: 268px;
+  margin-top: 24px;
+  padding-left: 14px;
+  border-left: 2px solid #b8b8b8;
+  position: sticky;
+  top: 10px;
+  align-self: start;
+  background: #e6e6e6;
+}
+
+.tc-inline-stats-panel .side-card {
+  background: #ececec !important;
+}
+
+.tool-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  box-shadow: inset 0 -1px 0 #b9b9b9;
+}
+
+.tc-table-area .tool-table {
+  position: relative;
+}
+
+@media (max-width: 1100px) {
+  .tc-inline-stats-panel {
+    position: static;
+    width: 100%;
+    min-width: 0;
+    margin-top: 8px;
+    padding-left: 0;
+    border-left: 0;
+  }
+}
+
+/* Step 12: sunken service-mode frames and home quick entry */
+:root {
+  --svc-line-dark: #9a9a9a;
+  --svc-line-light: #ffffff;
+  --svc-line-bg: #eeeeee;
+}
+
+.card,
+.hero-card,
+.section-card,
+.side-card,
+.chart-section-card,
+.tool-file-list,
+.column-toggle-panel,
+.summary-card,
+.info-tile,
+.mini-stat-card,
+.calc-result-card,
+.feature-link-card {
+  border: 1px solid #c7c7c7 !important;
+  border-top-color: var(--svc-line-dark) !important;
+  border-left-color: var(--svc-line-dark) !important;
+  border-right-color: var(--svc-line-light) !important;
+  border-bottom-color: var(--svc-line-light) !important;
+  box-shadow:
+    inset 1px 1px 0 #b7b7b7,
+    inset -1px -1px 0 #ffffff !important;
+}
+
+.section-card,
+.side-card,
+.chart-section-card {
+  position: relative;
+  padding: 16px 8px 8px !important;
+  margin-top: 6px;
+}
+
+.section-title,
+.side-card-title {
+  position: absolute;
+  top: -8px;
+  left: 8px;
+  margin: 0 !important;
+  padding: 0 5px !important;
+  background: var(--svc-line-bg) !important;
+  border: 0 !important;
+  color: #111;
+  font-size: 0.92rem !important;
+  line-height: 1.1;
+  font-weight: 800;
+}
+
+.hero-card {
+  padding-top: 8px !important;
+}
+
+.info-grid,
+.feature-link-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.feature-link-card {
+  min-height: 42px;
+  padding: 7px 9px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  text-align: left;
+  cursor: pointer;
+  background: #ededed !important;
+  color: #111;
+}
+
+.feature-link-card:hover {
+  background: #f7f7f7 !important;
+}
+
+.feature-link-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.feature-link-title {
+  font-weight: 900;
+  font-size: 0.95rem;
+  line-height: 1.15;
+}
+
+.feature-link-desc {
+  color: #555;
+  font-size: 0.78rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.feature-link-icon {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border-radius: 2px;
+  border: 1px solid #777;
+  border-top-color: #ffffff;
+  border-left-color: #ffffff;
+  background: linear-gradient(#fff2a8, #e0ad00);
+  color: #111;
+  font-size: 1rem;
+  font-weight: 900;
+  box-shadow: inset 1px 1px 0 rgba(255,255,255,0.8), inset -1px -1px 0 rgba(0,0,0,0.22);
+}
+
+/* Keep TC inline analysis compact after fieldset title conversion */
+.tc-inline-stats-panel .side-card {
+  padding-top: 16px !important;
+}
+
+.tc-inline-stats-panel .side-card-title {
+  top: -7px;
+  left: 6px;
+  font-size: 0.86rem !important;
+}
+
+.tool-table-wrap,
+.tc-table-area,
+.tc-inline-stats-panel {
+  border-top-color: var(--svc-line-dark) !important;
+  border-left-color: var(--svc-line-dark) !important;
+  border-right-color: var(--svc-line-light) !important;
+  border-bottom-color: var(--svc-line-light) !important;
+}
+
+@media (max-width: 900px) {
+  .info-grid,
+  .feature-link-grid {
+    grid-template-columns: 1fr;
+  }
+}

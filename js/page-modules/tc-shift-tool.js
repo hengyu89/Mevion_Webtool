@@ -33,6 +33,29 @@ const TC_SHIFT_ANGLE_BIN_HALF = 11.25;
 const TC_SHIFT_MIN_ANGLE = -5;
 const TC_SHIFT_MAX_ANGLE = 185;
 
+const TC_SHIFT_OFFSET_STORAGE_KEY = "tcShiftOffsetParameters";
+const TC_SHIFT_DEFAULT_OFFSET_PARAMS = {
+  ySlope: "239.85",
+  yOffset: "31331",
+  xSlope: "292.07",
+  xOffset: "33077"
+};
+
+function loadTcShiftOffsetParams() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(TC_SHIFT_OFFSET_STORAGE_KEY) || "{}");
+    return { ...TC_SHIFT_DEFAULT_OFFSET_PARAMS, ...saved };
+  } catch (error) {
+    return { ...TC_SHIFT_DEFAULT_OFFSET_PARAMS };
+  }
+}
+
+function saveTcShiftOffsetParam(key, value) {
+  const params = loadTcShiftOffsetParams();
+  params[key] = value;
+  localStorage.setItem(TC_SHIFT_OFFSET_STORAGE_KEY, JSON.stringify(params));
+}
+
 function normalizeAngleForDisplay(angle) {
   const num = Number(angle);
   if (Number.isNaN(num)) return null;
@@ -127,9 +150,6 @@ function initTcShiftToolPage() {
 
       <div id="tcFileList" class="tool-file-list empty-text">尚未选择文件。</div>
 
-      <div class="tool-actions">
-        <button id="tcParseBtn" class="tool-btn">开始解析</button>
-      </div>
 
       <div id="tcSummary" class="tool-summary"></div>
       <div id="tcResultTableWrap" class="tool-table-wrap"></div>
@@ -151,39 +171,44 @@ function initTcShiftToolPage() {
 function bindTcShiftToolEvents() {
   const dropZone = document.getElementById("tcDropZone");
   const fileInput = document.getElementById("tcFileInput");
-  const parseBtn = document.getElementById("tcParseBtn");
 
-  if (!dropZone || !fileInput || !parseBtn) return;
+  if (!dropZone || !fileInput) return;
 
   let selectedFiles = [];
 
-  function refreshFileList() {
+  function setFileStatus(message, type = "idle") {
     const fileList = document.getElementById("tcFileList");
     if (!fileList) return;
+    fileList.className = `tool-file-list tc-file-status ${type}`;
+    fileList.textContent = message;
+  }
 
+  async function analyzeSelectedFiles() {
     if (!selectedFiles.length) {
-      fileList.innerHTML = `尚未选择文件。`;
+      setFileStatus("尚未选择文件。", "idle");
       return;
     }
 
-    fileList.innerHTML = `
-      <div class="selected-files-title">已选择 ${selectedFiles.length} 个文件：</div>
-      <ul class="selected-files-list">
-        ${selectedFiles
-          .map(
-            (file) =>
-              `<li>${file.name} <span class="file-size">(${formatFileSize(file.size)})</span></li>`
-          )
-          .join("")}
-      </ul>
-    `;
+    setFileStatus(`已选择 ${selectedFiles.length} 份文件，正在分析... (0/${selectedFiles.length})`, "running");
+
+    try {
+      const rows = await parseTcShiftFiles(selectedFiles, (done, total) => {
+        setFileStatus(`已选择 ${total} 份文件，正在分析... (${done}/${total})`, "running");
+      });
+      renderTcShiftResults(rows);
+      setFileStatus(`共 ${selectedFiles.length} 份文件，分析完成！`, "done");
+    } catch (error) {
+      console.error(error);
+      setFileStatus(`分析失败：${error.message}`, "error");
+      alert(`分析失败：${error.message}`);
+    }
   }
 
   function setFiles(fileListLike) {
     selectedFiles = Array.from(fileListLike || []).filter((file) =>
       file.name.toLowerCase().endsWith(".csv")
     );
-    refreshFileList();
+    analyzeSelectedFiles();
   }
 
   dropZone.addEventListener("click", () => fileInput.click());
@@ -206,39 +231,26 @@ function bindTcShiftToolEvents() {
     dropZone.classList.remove("dragover");
     setFiles(event.dataTransfer.files);
   });
-
-  parseBtn.addEventListener("click", async () => {
-    if (!selectedFiles.length) {
-      alert("请先选择至少一个 CSV 文件。");
-      return;
-    }
-
-    parseBtn.disabled = true;
-    parseBtn.textContent = "解析中...";
-
-    try {
-      const rows = await parseTcShiftFiles(selectedFiles);
-      renderTcShiftResults(rows);
-    } catch (error) {
-      console.error(error);
-      alert(`解析失败：${error.message}`);
-    } finally {
-      parseBtn.disabled = false;
-      parseBtn.textContent = "开始解析";
-    }
-  });
 }
 
-async function parseTcShiftFiles(files) {
+async function parseTcShiftFiles(files, onProgress) {
   const allRecords = [];
+  const totalFiles = files.length;
 
-  for (const file of files) {
+  for (let fileIndex = 0; fileIndex < files.length; fileIndex += 1) {
+    const file = files[fileIndex];
     const text = await file.text();
     const records = parseCsvText(text, file.name);
 
     for (const record of records) {
       allRecords.push(record);
     }
+
+    if (typeof onProgress === "function") {
+      onProgress(fileIndex + 1, totalFiles);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
   }
 
   allRecords.sort((a, b) => a.tcTimeMs - b.tcTimeMs);
@@ -369,10 +381,7 @@ function getActiveRows() {
 }
 
 function getDisplayRows() {
-  if (tcShiftToolState.showExcludedRows) {
-    return tcShiftToolState.allRows;
-  }
-  return getActiveRows();
+  return tcShiftToolState.allRows;
 }
 
 function getExcludedRows() {
@@ -405,10 +414,31 @@ function clearSelection() {
   tcShiftToolState.selectedRowIds = [];
 }
 
+function getDefaultDataYear() {
+  const firstRowWithDate = tcShiftToolState.allRows.find((row) => row.date);
+  const year = firstRowWithDate ? Number(String(firstRowWithDate.date).slice(0, 4)) : new Date().getFullYear();
+  return Number.isNaN(year) ? new Date().getFullYear() : year;
+}
+
 function parseDateTimeLocalInput(value) {
-  if (!value) return null;
-  const ms = new Date(value).getTime();
-  return Number.isNaN(ms) ? null : ms;
+  const text = String(value || "").trim();
+  if (!text) return null;
+
+  const normalized = text.replace(/[\/\.]/g, "-").replace(/T/g, " ").replace(/\s+/g, " ");
+
+  let match = normalized.match(/^(\d{4})-(\d{1,2})-(\d{1,2})\s+(\d{1,2}):(\d{2})$/);
+  if (match) {
+    const [, y, m, d, hh, mm] = match;
+    return new Date(Number(y), Number(m) - 1, Number(d), Number(hh), Number(mm), 0, 0).getTime();
+  }
+
+  match = normalized.match(/^(\d{1,2})-(\d{1,2})\s+(\d{1,2}):(\d{2})$/);
+  if (match) {
+    const [, m, d, hh, mm] = match;
+    return new Date(getDefaultDataYear(), Number(m) - 1, Number(d), Number(hh), Number(mm), 0, 0).getTime();
+  }
+
+  return null;
 }
 
 function renderTcShiftResults(rows) {
@@ -436,14 +466,12 @@ function renderTcShiftTableAndSummary() {
   tcShiftToolState.currentPage = currentPage;
 
   summary.innerHTML = `
-    <div class="summary-row">
-      <div class="summary-card">
-        <div><strong>总行数：</strong>${tcShiftToolState.allRows.length}</div>
-        <div><strong>当前参与计算：</strong>${activeRows.length}</div>
-        <div><strong>已排除：</strong>${excludedRows.length}</div>
+    <div class="summary-row tc-control-row">
+      <div class="summary-card tc-data-count">
+        <strong>提取数据：</strong>${activeRows.length}/${tcShiftToolState.allRows.length}
       </div>
 
-      <div class="column-toggle-panel">
+      <div class="column-toggle-panel compact-column-toggle-panel">
         <label class="column-toggle-item">
           <input type="checkbox" data-col="date" ${tcShiftToolState.visibleColumns.date ? "checked" : ""}>
           <span>Date</span>
@@ -465,55 +493,43 @@ function renderTcShiftTableAndSummary() {
           <span>X shift</span>
         </label>
       </div>
-    </div>
 
-    <div class="summary-row bulk-action-row">
-      <div class="bulk-action-group">
-        <button id="clearSelectionBtn" class="tool-btn secondary-btn">清空勾选</button>
-        <button id="excludeSelectedBtn" class="tool-btn warn-btn">排除选中</button>
-        <button id="restoreSelectedBtn" class="tool-btn secondary-btn">恢复选中</button>
-        <button id="restoreAllBtn" class="tool-btn secondary-btn">恢复全部</button>
+      <div class="bulk-action-group tc-edit-action-group">
+        <button id="toggleSelectPageBtn" class="tool-btn secondary-btn">全/反选</button>
+        <button id="excludeSelectedBtn" class="tool-btn warn-btn">删除</button>
+        <button id="restoreSelectedBtn" class="tool-btn secondary-btn">恢复</button>
+        <button id="restoreAllBtn" class="tool-btn secondary-btn">全部复原</button>
       </div>
 
-      <div class="bulk-action-group">
-        <label class="column-toggle-item">
-          <input id="showExcludedRowsToggle" type="checkbox" ${tcShiftToolState.showExcludedRows ? "checked" : ""}>
-          <span>显示已排除行</span>
-        </label>
-      </div>
-    </div>
-
-    <div class="summary-row time-exclude-row">
-      <div class="time-exclude-panel time-range-inline">
-        <input
-          id="excludeStartInput"
-          type="datetime-local"
-          step="1"
-          class="calc-input compact-input time-range-input"
-          value="${escapeHtml(tcShiftToolState.exclusionStartInput)}"
-        />
-
-        <span class="time-range-separator">to</span>
-
-        <input
-          id="excludeEndInput"
-          type="datetime-local"
-          step="1"
-          class="calc-input compact-input time-range-input"
-          value="${escapeHtml(tcShiftToolState.exclusionEndInput)}"
-        />
-
-        <div class="time-exclude-actions">
-          <button id="excludeTimeRangeBtn" class="tool-btn warn-btn">仅取此时段</button>
+      <div class="table-pagination compact-pagination top-pagination">
+        <div class="pagination-info compact-pagination-info">
+          第
+          <input
+            id="tcPageInput"
+            class="page-jump-input compact-page-jump-input"
+            type="number"
+            min="1"
+            max="${totalPages}"
+            value="${currentPage}"
+          />
+          / ${totalPages} 页
         </div>
+        <button id="tcPrevPageBtn" class="tool-btn pagination-btn" ${currentPage <= 1 ? "disabled" : ""}>上一页</button>
+        <button id="tcNextPageBtn" class="tool-btn pagination-btn" ${currentPage >= totalPages ? "disabled" : ""}>下一页</button>
       </div>
     </div>
+
   `;
 
   bindColumnToggleEvents();
 
   if (!tableRows.length) {
-    wrap.innerHTML = `<div class="empty-text">没有可显示的数据。</div>`;
+    wrap.innerHTML = `
+      <div class="tc-empty-table-with-stats">
+        <div class="empty-text">没有可显示的数据。</div>
+        <div id="tcInlineStatsPanel" class="tc-inline-stats-panel"></div>
+      </div>
+    `;
     renderTcShiftStatsToSide(calculateShiftStats(activeRows));
     return;
   }
@@ -522,36 +538,21 @@ function renderTcShiftTableAndSummary() {
   const pageRows = tableRows.slice(startIndex, startIndex + pageSize);
 
   wrap.innerHTML = `
-    ${buildTcShiftTableHtml(pageRows)}
-
-    <div class="table-pagination">
-      <button id="tcPrevPageBtn" class="tool-btn pagination-btn" ${currentPage <= 1 ? "disabled" : ""}>上一页</button>
-
-      <div class="pagination-info">
-        第
-        <input
-          id="tcPageInput"
-          class="page-jump-input"
-          type="number"
-          min="1"
-          max="${totalPages}"
-          value="${currentPage}"
-        />
-        / ${totalPages} 页
+    <div class="tc-table-stats-layout">
+      <div class="tc-table-area">
+        ${buildTcShiftTableHtml(pageRows)}
       </div>
-
-      <button id="tcNextPageBtn" class="tool-btn pagination-btn" ${currentPage >= totalPages ? "disabled" : ""}>下一页</button>
+      <aside id="tcInlineStatsPanel" class="tc-inline-stats-panel"></aside>
     </div>
 
     ${buildTcShiftChartSectionHtml()}
   `;
 
   bindPaginationEvents(totalPages);
-  bindTableRowSelectionEvents();
   bindSelectionToolbarEvents(pageRows);
+  renderTcShiftStatsToSide(calculateShiftStats(activeRows));
   bindChartEvents();
   drawTcShiftChart();
-  renderTcShiftStatsToSide(calculateShiftStats(activeRows));
 }
 
 function buildTcShiftTableHtml(rows) {
@@ -565,6 +566,16 @@ function buildTcShiftTableHtml(rows) {
   if (visible.xShift) headers.push(`<th>X shift</th>`);
   headers.push(`<th>Status</th>`);
 
+  const colWidths = ["30px"];
+  if (visible.date) colWidths.push("96px");
+  if (visible.time) colWidths.push("96px");
+  if (visible.angle) colWidths.push("72px");
+  if (visible.yShift) colWidths.push("96px");
+  if (visible.xShift) colWidths.push("96px");
+  colWidths.push("82px");
+
+  const colGroup = `<colgroup>${colWidths.map((width) => `<col style="width:${width}">`).join("")}</colgroup>`;
+
   const bodyRows = rows
     .map((row) => {
       const yDanger =
@@ -572,7 +583,9 @@ function buildTcShiftTableHtml(rows) {
       const xDanger =
         row.xShift !== "" && (Number(row.xShift) < -2 || Number(row.xShift) > 2);
 
-      const rowClass = row.excluded ? "excluded-row" : "";
+      const rowClass = [row.excluded ? "excluded-row" : "", isRowSelected(row.rowId) ? "row-selected" : ""]
+        .filter(Boolean)
+        .join(" ");
 
       const cells = [
         `<td class="select-col">
@@ -607,16 +620,17 @@ function buildTcShiftTableHtml(rows) {
 
       cells.push(`
         <td>
-          ${row.excluded ? '<span class="row-status-badge excluded">Excluded</span>' : '<span class="row-status-badge active">Active</span>'}
+          ${row.excluded ? '<span class="row-status-badge excluded">Deleted</span>' : '<span class="row-status-badge active">Active</span>'}
         </td>
       `);
 
-      return `<tr class="${rowClass}">${cells.join("")}</tr>`;
+      return `<tr class="${rowClass} selectable-data-row" data-row-id="${escapeHtml(row.rowId)}">${cells.join("")}</tr>`;
     })
     .join("");
 
   return `
-    <table class="tool-table dynamic-table">
+    <table class="tool-table dynamic-table tc-shift-data-table">
+      ${colGroup}
       <thead>
         <tr>${headers.join("")}</tr>
       </thead>
@@ -687,32 +701,39 @@ function bindColumnToggleEvents() {
 }
 
 function bindSelectionToolbarEvents(pageRows) {
-  const showExcludedRowsToggle = document.getElementById("showExcludedRowsToggle");
-  const clearSelectionBtn = document.getElementById("clearSelectionBtn");
+  const toggleSelectPageBtn = document.getElementById("toggleSelectPageBtn");
   const excludeSelectedBtn = document.getElementById("excludeSelectedBtn");
   const restoreSelectedBtn = document.getElementById("restoreSelectedBtn");
   const restoreAllBtn = document.getElementById("restoreAllBtn");
-  const excludeTimeRangeBtn = document.getElementById("excludeTimeRangeBtn");
-  const excludeStartInput = document.getElementById("excludeStartInput");
-  const excludeEndInput = document.getElementById("excludeEndInput");
   const rowCheckboxes = document.querySelectorAll(".row-select-checkbox");
   const selectAllCurrentPageCheckbox = document.getElementById("selectAllCurrentPageCheckbox");
 
-  if (showExcludedRowsToggle) {
-    showExcludedRowsToggle.addEventListener("change", () => {
-      tcShiftToolState.showExcludedRows = showExcludedRowsToggle.checked;
-      tcShiftToolState.currentPage = 1;
-      renderTcShiftStatsToSide(calculateShiftStats(getActiveRows()));
-      renderTcShiftTableAndSummary();
-    });
-  }
-
   rowCheckboxes.forEach((checkbox) => {
+    checkbox.addEventListener("click", (event) => {
+      event.stopPropagation();
+    });
+
     checkbox.addEventListener("change", (event) => {
       const rowId = event.target.dataset.rowId;
       toggleRowSelection(rowId, event.target.checked);
     });
   });
+
+  document.querySelectorAll(".selectable-data-row").forEach((rowEl) => {
+    rowEl.addEventListener("click", (event) => {
+      if (event.target.closest("input, button, a, label")) return;
+      const rowId = rowEl.dataset.rowId;
+      const checkbox = rowEl.querySelector(".row-select-checkbox");
+      if (!rowId || !checkbox) return;
+
+      const checked = !checkbox.checked;
+      checkbox.checked = checked;
+      toggleRowSelection(rowId, checked);
+      rowEl.classList.toggle("row-selected", checked);
+    });
+  });
+
+  bindDragSelectRows();
 
   if (selectAllCurrentPageCheckbox) {
     const pageRowIds = pageRows.map((row) => row.rowId);
@@ -728,12 +749,21 @@ function bindSelectionToolbarEvents(pageRows) {
     });
   }
 
-  if (clearSelectionBtn) {
-    clearSelectionBtn.addEventListener("click", () => {
-      clearSelection();
+
+  if (toggleSelectPageBtn) {
+    toggleSelectPageBtn.addEventListener("click", () => {
+      const pageRowIds = pageRows.map((row) => row.rowId);
+      const selectedSet = new Set(tcShiftToolState.selectedRowIds);
+      const allSelected = pageRowIds.length > 0 && pageRowIds.every((rowId) => selectedSet.has(rowId));
+
+      pageRowIds.forEach((rowId) => {
+        toggleRowSelection(rowId, !allSelected);
+      });
+
       renderTcShiftTableAndSummary();
     });
   }
+
 
   if (excludeSelectedBtn) {
     excludeSelectedBtn.addEventListener("click", () => {
@@ -763,6 +793,7 @@ function bindSelectionToolbarEvents(pageRows) {
     });
   }
 
+
   if (restoreAllBtn) {
     restoreAllBtn.addEventListener("click", () => {
       tcShiftToolState.allRows.forEach((row) => {
@@ -774,50 +805,117 @@ function bindSelectionToolbarEvents(pageRows) {
     });
   }
 
-  if (excludeStartInput) {
-    excludeStartInput.addEventListener("input", () => {
-      tcShiftToolState.exclusionStartInput = excludeStartInput.value;
+}
+
+
+function bindDragSelectRows() {
+  const table = document.querySelector(".tc-shift-data-table");
+  if (!table) return;
+
+  let isDragging = false;
+  let dragSelectMode = true;
+  let startX = 0;
+  let startY = 0;
+  let selectionBox = null;
+  let touchedRowIds = new Set();
+  let didDrag = false;
+
+  function getPagePoint(event) {
+    return { x: event.pageX, y: event.pageY };
+  }
+
+  function ensureSelectionBox() {
+    if (selectionBox) return selectionBox;
+    selectionBox = document.createElement("div");
+    selectionBox.className = "drag-select-box";
+    document.body.appendChild(selectionBox);
+    return selectionBox;
+  }
+
+  function updateSelectionBox(currentX, currentY) {
+    const box = ensureSelectionBox();
+    const left = Math.min(startX, currentX);
+    const top = Math.min(startY, currentY);
+    const width = Math.abs(currentX - startX);
+    const height = Math.abs(currentY - startY);
+
+    box.style.left = `${left}px`;
+    box.style.top = `${top}px`;
+    box.style.width = `${width}px`;
+    box.style.height = `${height}px`;
+  }
+
+  function rectsIntersect(a, b) {
+    return !(a.right < b.left || a.left > b.right || a.bottom < b.top || a.top > b.bottom);
+  }
+
+  function getSelectionRect() {
+    if (!selectionBox) return null;
+    return selectionBox.getBoundingClientRect();
+  }
+
+  function applyDragSelection() {
+    const selectionRect = getSelectionRect();
+    if (!selectionRect) return;
+
+    document.querySelectorAll(".selectable-data-row").forEach((rowEl) => {
+      const rowRect = rowEl.getBoundingClientRect();
+      if (!rectsIntersect(selectionRect, rowRect)) return;
+
+      const rowId = rowEl.dataset.rowId;
+      if (!rowId || touchedRowIds.has(rowId)) return;
+
+      touchedRowIds.add(rowId);
+      const checkbox = rowEl.querySelector(".row-select-checkbox");
+      if (checkbox) checkbox.checked = dragSelectMode;
+      toggleRowSelection(rowId, dragSelectMode);
+      rowEl.classList.toggle("row-selected", dragSelectMode);
     });
   }
 
-  if (excludeEndInput) {
-    excludeEndInput.addEventListener("input", () => {
-      tcShiftToolState.exclusionEndInput = excludeEndInput.value;
-    });
-  }
+  table.addEventListener("click", (event) => {
+    if (!didDrag) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    didDrag = false;
+  }, true);
 
-  if (excludeTimeRangeBtn) {
-    excludeTimeRangeBtn.addEventListener("click", () => {
-      const startMs = parseDateTimeLocalInput(tcShiftToolState.exclusionStartInput);
-      const endMs = parseDateTimeLocalInput(tcShiftToolState.exclusionEndInput);
+  table.addEventListener("mousedown", (event) => {
+    if (event.button !== 0) return;
+    if (event.target.closest("input, button, a, label")) return;
 
-      if (startMs === null || endMs === null) {
-        alert("请先输入有效的起始和结束时间。");
-        return;
-      }
+    const rowEl = event.target.closest(".selectable-data-row");
+    const rowId = rowEl ? rowEl.dataset.rowId : null;
+    dragSelectMode = rowId ? !isRowSelected(rowId) : true;
+    touchedRowIds = new Set();
 
-      if (startMs > endMs) {
-        alert("起始时间不能晚于结束时间。");
-        return;
-      }
+    const point = getPagePoint(event);
+    startX = point.x;
+    startY = point.y;
+    isDragging = true;
 
-      let matchedCount = 0;
+    updateSelectionBox(startX, startY);
+    didDrag = false;
+    event.preventDefault();
+  });
 
-      tcShiftToolState.allRows.forEach((row) => {
-        const inRange = row.shiftTimeMs >= startMs && row.shiftTimeMs <= endMs;
-        row.excluded = !inRange;
-        if (inRange) matchedCount += 1;
-      });
+  document.addEventListener("mousemove", (event) => {
+    if (!isDragging) return;
+    const point = getPagePoint(event);
+    const distance = Math.hypot(point.x - startX, point.y - startY);
+    if (distance > 4) didDrag = true;
+    updateSelectionBox(point.x, point.y);
+    applyDragSelection();
+  });
 
-      if (matchedCount === 0) {
-        alert("这个时段内没有匹配到任何数据。请检查时间是否和当前数据日期一致。");
-      }
-
-      clearSelection();
-      renderTcShiftStatsToSide(calculateShiftStats(getActiveRows()));
-      renderTcShiftTableAndSummary();
-    });
-  }
+  document.addEventListener("mouseup", () => {
+    if (!isDragging) return;
+    isDragging = false;
+    if (selectionBox) {
+      selectionBox.remove();
+      selectionBox = null;
+    }
+  }, { once: true });
 }
 
 function bindTableRowSelectionEvents() {
@@ -984,20 +1082,12 @@ function calculateShiftStats(rows) {
 }
 
 function renderTcShiftStatsToSide(stats) {
-  const sideContent = document.getElementById("sideContent");
-  if (!sideContent) return;
+  const statsTarget = document.getElementById("tcInlineStatsPanel") || document.getElementById("sideContent");
+  if (!statsTarget) return;
 
-  sideContent.innerHTML = `
-    <section class="card side-card">
-      <h3 class="side-card-title">第一版规则</h3>
-      <div class="side-list">
-        <div class="side-list-item"><span class="notice-badge">INFO</span>使用 TC Timestamp 作为主时间轴。</div>
-        <div class="side-list-item"><span class="notice-badge">INFO</span>X/Y 时间差不超过 1 秒则尝试合并为同一行。</div>
-        <div class="side-list-item"><span class="notice-badge">INFO</span>连续两个 X 或两个 Y 时自动另起一行。</div>
-        <div class="side-list-item"><span class="notice-badge">INFO</span>支持一次拖入多个 CSV 文件并统一排序。</div>
-      </div>
-    </section>
+  const offsetParams = loadTcShiftOffsetParams();
 
+  statsTarget.innerHTML = `
     <section class="card side-card stats-section-card">
       <h3 class="side-card-title">Shift 统计</h3>
       <div class="side-stats-grid">
@@ -1038,10 +1128,11 @@ function renderTcShiftStatsToSide(stats) {
           <span>Y (CP) slope</span>
           <input
             id="ySlopeInput"
+            data-param-key="ySlope"
             type="number"
             step="any"
-            class="calc-input compact-input narrow-input"
-            value="239.85"
+            class="calc-input compact-input narrow-input offset-param-input"
+            value="${escapeHtml(offsetParams.ySlope)}"
           />
         </label>
 
@@ -1049,10 +1140,11 @@ function renderTcShiftStatsToSide(stats) {
           <span>Y (CP) offset</span>
           <input
             id="yOffsetInput"
+            data-param-key="yOffset"
             type="number"
             step="any"
-            class="calc-input compact-input narrow-input"
-            value="31331"
+            class="calc-input compact-input narrow-input offset-param-input"
+            value="${escapeHtml(offsetParams.yOffset)}"
           />
         </label>
 
@@ -1060,10 +1152,11 @@ function renderTcShiftStatsToSide(stats) {
           <span>X (IP) slope</span>
           <input
             id="xSlopeInput"
+            data-param-key="xSlope"
             type="number"
             step="any"
-            class="calc-input compact-input narrow-input"
-            value="292.07"
+            class="calc-input compact-input narrow-input offset-param-input"
+            value="${escapeHtml(offsetParams.xSlope)}"
           />
         </label>
 
@@ -1071,22 +1164,23 @@ function renderTcShiftStatsToSide(stats) {
           <span>X (IP) offset</span>
           <input
             id="xOffsetInput"
+            data-param-key="xOffset"
             type="number"
             step="any"
-            class="calc-input compact-input narrow-input"
-            value="33077"
+            class="calc-input compact-input narrow-input offset-param-input"
+            value="${escapeHtml(offsetParams.xOffset)}"
           />
         </label>
       </div>
 
       <div class="calc-result-wrap">
-        <div class="calc-result-card">
-          <div class="mini-stat-label">Y new offset</div>
-          <div id="yNewOffsetOutput" class="mini-stat-value">--</div>
+        <div class="calc-result-card offset-result-card">
+          <div class="mini-stat-label offset-result-label">Y new offset</div>
+          <div id="yNewOffsetOutput" class="mini-stat-value offset-result-value">--</div>
         </div>
-        <div class="calc-result-card">
-          <div class="mini-stat-label">X new offset</div>
-          <div id="xNewOffsetOutput" class="mini-stat-value">--</div>
+        <div class="calc-result-card offset-result-card">
+          <div class="mini-stat-label offset-result-label">X new offset</div>
+          <div id="xNewOffsetOutput" class="mini-stat-value offset-result-value">--</div>
         </div>
       </div>
     </section>
@@ -1146,7 +1240,10 @@ function bindOffsetCalculator(stats) {
   }
 
   [ySlopeInput, yOffsetInput, xSlopeInput, xOffsetInput].forEach((input) => {
-    input.addEventListener("input", updateOutputs);
+    input.addEventListener("input", () => {
+      saveTcShiftOffsetParam(input.dataset.paramKey, input.value);
+      updateOutputs();
+    });
   });
 
   updateOutputs();

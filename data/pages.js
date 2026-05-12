@@ -25,7 +25,7 @@ const menuData = [
     id: "tools",
     title: "工具",
     children: [
-      { id: "tool-tc-shift", title: "工具.1 TC Log Shift Matcher" }
+      { id: "tool-tc-shift", title: "Scanning Magnet Shift" }
     ]
   }
 ];
@@ -42,6 +42,18 @@ const pageContent = {
         title: "当前状态",
         type: "text",
         content: "这版已经具备固定背景、毛玻璃容器、三列布局、菜单展开、高亮当前项，以及动态内容切换。适合继续往里长真正的工具和笔记。"
+      },
+      {
+        title: "新功能",
+        type: "toolLinks",
+        items: [
+          {
+            label: "Scanning Magnet Shift 计算器",
+            desc: "TCLogger layer shift 提取、统计、offset 计算与绘图",
+            pageId: "tool-tc-shift",
+            icon: "▣"
+          }
+        ]
       },
       {
         title: "可放的内容",
@@ -329,9 +341,9 @@ const pageContent = {
 
   "tool-tc-shift": {
     hero: {
-      tag: "Tool.1",
-      title: "TC Log Shift Matcher",
-      desc: "拖入一个或多个 TCLogger 文件，自动提取 gantry angle、X/Y shift，并按时间匹配输出表格。"
+      tag: "",
+      title: "Scanning Magnet Shift 计算器",
+      desc: "拖入一个或多个 TCLogger 文件，自动提取 layer shift 数据并分析、计算、绘图"
     },
     sections: [
       {
@@ -340,16 +352,6 @@ const pageContent = {
         customId: "tcShiftToolRoot"
       }
     ],
-    side: [
-      {
-        title: "第一版规则",
-        items: [
-          "使用 TC Timestamp 作为主时间轴。",
-          "X/Y 时间差不超过 1 秒则尝试合并为同一行。",
-          "连续两个 X 或两个 Y 时自动另起一行。",
-          "支持一次拖入多个 CSV 文件并统一排序。"
-        ]
-      }
-    ]
+    side: []
   }
 };
