@@ -2370,3 +2370,310 @@ canvas {
     grid-template-columns: 1fr;
   }
 }
+
+/* =========================================================
+   Final Service UI overrides
+   目标：
+   - 保留当前 v7 页面效果
+   - 删除多轮调试时叠加的重复 CSS
+   - 不改变 JS 逻辑、不改变页面布局
+   ========================================================= */
+
+:root {
+  --svc-etch-dark: #8f8f8f;
+  --svc-etch-light: #ffffff;
+  --svc-panel: #eeeeee;
+}
+
+/* 全局字号：工程软件小字体，但不要过小 */
+body {
+  font-size: 13px !important;
+}
+
+table,
+input,
+button,
+select,
+textarea {
+  font-size: 12px !important;
+}
+
+.section-title,
+.side-card-title {
+  font-size: 13px !important;
+}
+
+/* etched frame：横线灰上白下，竖线灰左白右 */
+.card,
+.hero-card,
+.section-card,
+.side-card,
+.chart-section-card,
+.tool-file-list,
+.column-toggle-panel,
+.time-exclude-panel,
+.summary-card,
+.info-tile,
+.side-list-item,
+.mini-stat-card,
+.calc-result-card,
+.feature-link-card,
+.tool-table-wrap,
+.tc-table-area,
+.tc-inline-stats-panel {
+  position: relative !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: var(--svc-panel) !important;
+  overflow: visible !important;
+}
+
+.card::before,
+.hero-card::before,
+.section-card::before,
+.side-card::before,
+.chart-section-card::before,
+.tool-file-list::before,
+.column-toggle-panel::before,
+.time-exclude-panel::before,
+.summary-card::before,
+.info-tile::before,
+.side-list-item::before,
+.mini-stat-card::before,
+.calc-result-card::before,
+.feature-link-card::before,
+.tool-table-wrap::before,
+.tc-table-area::before,
+.tc-inline-stats-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  background:
+    linear-gradient(to bottom, var(--svc-etch-dark) 0 1px, var(--svc-etch-light) 1px 2px, transparent 2px) left top / 100% 2px no-repeat,
+    linear-gradient(to bottom, var(--svc-etch-dark) 0 1px, var(--svc-etch-light) 1px 2px) left bottom / 100% 2px no-repeat,
+    linear-gradient(to right, var(--svc-etch-dark) 0 1px, var(--svc-etch-light) 1px 2px, transparent 2px) left top / 2px 100% no-repeat,
+    linear-gradient(to right, var(--svc-etch-dark) 0 1px, var(--svc-etch-light) 1px 2px) right top / 2px 100% no-repeat;
+}
+
+.card > *,
+.hero-card > *,
+.section-card > *,
+.side-card > *,
+.chart-section-card > *,
+.tool-file-list > *,
+.column-toggle-panel > *,
+.time-exclude-panel > *,
+.summary-card > *,
+.info-tile > *,
+.side-list-item > *,
+.mini-stat-card > *,
+.calc-result-card > *,
+.feature-link-card > *,
+.tool-table-wrap > *,
+.tc-table-area > *,
+.tc-inline-stats-panel > * {
+  position: relative;
+  z-index: 3;
+}
+
+/* 分区标题 */
+.section-card,
+.side-card,
+.chart-section-card {
+  margin-top: 16px !important;
+  padding: 16px 8px 8px !important;
+}
+
+.section-title,
+.side-card-title {
+  position: absolute !important;
+  top: -9px !important;
+  left: 8px !important;
+  margin: 0 !important;
+  padding: 0 5px !important;
+  background: var(--svc-panel) !important;
+  border: 0 !important;
+  color: #111 !important;
+  line-height: 1.1 !important;
+  font-weight: 800 !important;
+  z-index: 4 !important;
+}
+
+/* 首页工具入口：按内容收窄 */
+.feature-link-grid,
+.info-grid {
+  display: grid !important;
+  grid-template-columns: repeat(3, max-content) !important;
+  justify-content: start !important;
+  align-items: start !important;
+  column-gap: 10px !important;
+  row-gap: 8px !important;
+}
+
+.feature-link-card {
+  width: max-content !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  min-height: 40px !important;
+  padding: 7px 12px !important;
+  justify-content: flex-start !important;
+  gap: 0 !important;
+}
+
+.info-tile {
+  width: max-content !important;
+  min-width: 170px !important;
+  max-width: none !important;
+  padding: 7px 12px !important;
+}
+
+.feature-link-desc {
+  max-width: none !important;
+  white-space: nowrap !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+}
+
+.feature-link-icon {
+  display: none !important;
+}
+
+.feature-link-title::before {
+  content: "⭐ ";
+  font-size: 0.9em;
+}
+
+/* TC Shift 主布局 */
+.tc-main-layout,
+.tc-content-layout,
+.tc-upper-layout {
+  display: grid !important;
+  grid-template-columns: minmax(900px, 1fr) 340px !important;
+  gap: 10px !important;
+  align-items: start !important;
+}
+
+.tc-table-area,
+.tool-table-wrap {
+  width: 100% !important;
+  min-width: 900px !important;
+}
+
+.tc-inline-stats-panel,
+.summary-card,
+.side-card {
+  width: 340px !important;
+  min-width: 340px !important;
+}
+
+table td,
+table th {
+  padding: 4px 6px !important;
+}
+
+.main-content,
+.page-content,
+.tc-page,
+.tc-tool-page {
+  max-width: none !important;
+  width: 100% !important;
+}
+
+/* 图表：真实 2/3 尺寸，控制区保持左对齐 */
+.chart-section-card {
+  text-align: left !important;
+  min-height: 0 !important;
+  padding-bottom: 12px !important;
+}
+
+.chart-panel-top,
+.chart-toolbar,
+.chart-toolbar-main,
+.chart-toolbar-sub,
+.chart-toolbar-left,
+.chart-toolbar-grid,
+.chart-toolbar-right,
+.chart-toggle-group,
+.chart-legend,
+.chart-legend-compact,
+.chart-controls {
+  width: auto !important;
+  max-width: none !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  text-align: left !important;
+  justify-content: flex-start !important;
+}
+
+.chart-canvas-wrap,
+.chart-wrap,
+.chart-container,
+.tc-chart-wrap {
+  width: 600px !important;
+  max-width: 600px !important;
+  min-width: 600px !important;
+  height: 280px !important;
+  max-height: 280px !important;
+  margin: 6px 0 0 0 !important;
+  overflow: visible !important;
+}
+
+#tcShiftChartCanvas,
+.chart-canvas-wrap canvas,
+.chart-wrap canvas,
+.chart-container canvas,
+.tc-chart-wrap canvas,
+.chart-section-card canvas {
+  width: 600px !important;
+  height: 280px !important;
+  max-width: 600px !important;
+  max-height: 280px !important;
+  display: block !important;
+}
+
+/* 响应式兜底 */
+@media (max-width: 1400px) {
+  .tc-main-layout,
+  .tc-content-layout,
+  .tc-upper-layout {
+    grid-template-columns: 1fr !important;
+  }
+
+  .tc-inline-stats-panel,
+  .summary-card,
+  .side-card {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .tc-table-area,
+  .tool-table-wrap {
+    min-width: 0 !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .feature-link-grid,
+  .info-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .feature-link-card,
+  .info-tile {
+    width: 100% !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .chart-canvas-wrap,
+  .chart-wrap,
+  .chart-container,
+  .tc-chart-wrap {
+    overflow-x: auto !important;
+    max-width: 100% !important;
+  }
+}
+

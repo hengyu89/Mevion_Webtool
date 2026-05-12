@@ -1341,7 +1341,7 @@ function buildTcShiftChartSectionHtml() {
       </div>
 
       <div class="chart-canvas-wrap">
-        <canvas id="tcShiftChartCanvas" width="900" height="420"></canvas>
+        <canvas id="tcShiftChartCanvas" width="600" height="280"></canvas>
       </div>
     </section>
   `;

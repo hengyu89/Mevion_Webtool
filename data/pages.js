@@ -51,7 +51,7 @@ const pageContent = {
             label: "Scanning Magnet Shift 计算器",
             desc: "TCLogger layer shift 提取、统计、offset 计算与绘图",
             pageId: "tool-tc-shift",
-            icon: "▣"
+            icon: ""
           }
         ]
       },
