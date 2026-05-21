@@ -734,7 +734,7 @@ function getTicTimeRangeHtml(points) {
   if (!points.length) return "-";
   const minTime = Math.min(...points.map((p) => p.timeMs));
   const maxTime = Math.max(...points.map((p) => p.timeMs));
-  return `${escapeTicHtml(formatTicAxisTime(minTime, minTime, maxTime))} <strong>to</strong> ${escapeTicHtml(formatTicAxisTime(maxTime, minTime, maxTime))}`;
+  return `${escapeTicHtml(formatTicAxisTime(minTime, minTime, maxTime))}<span class="tic-range-to">to</span>${escapeTicHtml(formatTicAxisTime(maxTime, minTime, maxTime))}`;
 }
 
 function formatTicElapsed(elapsedMs) {

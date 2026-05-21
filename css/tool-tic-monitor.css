@@ -18,23 +18,37 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 7px;
-  margin: 4px 0 0;
+  gap: 10px;
+  margin: 8px 0 8px;
 }
 
 .tic-summary-row .summary-card {
-  padding-left: 10px;
-  padding-right: 10px;
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  width: fit-content;
+  min-width: 0;
+  max-width: none;
+  min-height: 44px;
+  padding: 10px 22px;
+  line-height: 22px;
+  white-space: nowrap;
 }
 
 .tic-sample-card {
-  min-width: 82px;
-  width: 82px;
+  width: fit-content;
+  min-width: 132px;
 }
 
 .tic-time-range {
-  min-width: 240px;
-  width: 240px;
+  width: fit-content;
+  min-width: 360px;
+}
+
+.tic-range-to {
+  display: inline-block;
+  margin: 0 20px;
+  font-weight: 900;
 }
 
 .tic-charts-root {
@@ -114,3 +128,27 @@
 }
 
 
+
+/* TIC summary spacing refinement: keep the cards compact and pull them closer
+   to the upload/status block above and the chart block below. */
+#ticSummary.tool-summary {
+  display: block !important;
+  min-height: 0 !important;
+  height: auto !important;
+  padding: 0 !important;
+  margin-top: 2px !important;
+  margin-bottom: 2px !important;
+  line-height: normal !important;
+}
+
+#ticSummary .tic-summary-row {
+  margin: 3px 0 4px !important;
+}
+
+#ticChartsRoot.tic-charts-root {
+  margin-top: 0 !important;
+}
+
+#ticChartsRoot .tic-chart-card {
+  margin-top: 0 !important;
+}
