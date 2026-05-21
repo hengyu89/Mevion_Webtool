@@ -189,14 +189,34 @@ function bindTcShiftToolEvents() {
       return;
     }
 
-    setFileStatus(`已选择 ${selectedFiles.length} 份文件，正在分析... (0/${selectedFiles.length})`, "running");
+    const analysisStartTime = performance.now();
+
+    setFileStatus(
+      `已选择 ${selectedFiles.length} 份文件，正在分析... (0/${selectedFiles.length})`,
+      "running"
+    );
 
     try {
-      const rows = await parseTcShiftFiles(selectedFiles, (done, total) => {
-        setFileStatus(`已选择 ${total} 份文件，正在分析... (${done}/${total})`, "running");
+      const rows = await parseTcShiftFiles(selectedFiles, (done, total, currentFileName) => {
+        const shortName =
+          currentFileName.length > 36
+            ? `${currentFileName.slice(0, 33)}...`
+            : currentFileName;
+
+        setFileStatus(
+          `已选择 ${total} 份文件，正在分析... (${done}/${total})。当前文件: ${shortName}`,
+          "running"
+        );
       });
+
       renderTcShiftResults(rows);
-      setFileStatus(`共 ${selectedFiles.length} 份文件，分析完成！`, "done");
+
+      const elapsedMs = performance.now() - analysisStartTime;
+
+      setFileStatus(
+        `共 ${selectedFiles.length} 份文件，耗时 ${formatAnalysisElapsed(elapsedMs)}，分析完成！`,
+        "done"
+      );
     } catch (error) {
       console.error(error);
       setFileStatus(`分析失败：${error.message}`, "error");
@@ -234,62 +254,138 @@ function bindTcShiftToolEvents() {
 }
 
 async function parseTcShiftFiles(files, onProgress) {
-  const allRecords = [];
+  const angleEvents = [];
+  const shiftEvents = [];
   const totalFiles = files.length;
 
   for (let fileIndex = 0; fileIndex < files.length; fileIndex += 1) {
     const file = files[fileIndex];
-    const text = await file.text();
-    const records = parseCsvText(text, file.name);
-
-    for (const record of records) {
-      allRecords.push(record);
-    }
 
     if (typeof onProgress === "function") {
-      onProgress(fileIndex + 1, totalFiles);
+      onProgress(fileIndex + 1, totalFiles, file.name);
     }
 
+    await parseTcShiftFileStream(file, angleEvents, shiftEvents);
+
+    // Give the browser a rendering/GC chance between large files.
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
 
-  allRecords.sort((a, b) => a.tcTimeMs - b.tcTimeMs);
-
-  const angleEvents = [];
-  const shiftEvents = [];
-
-  for (const row of allRecords) {
-    const message = row["Message Text"] || "";
-    const source = row["Source"] || "";
-
-    const angleMatch = message.match(/readback:\s*gantry angle\s*(-?\d+(?:\.\d+)?)/i);
-    if (angleMatch) {
-      angleEvents.push({
-        tcTimeMs: row.tcTimeMs,
-        tcTimestamp: row["TC Timestamp"],
-        angle: Number(angleMatch[1])
-      });
-      continue;
-    }
-
-    const shiftMatch = message.match(/Storing initial layer shift of\s*(-?\d+(?:\.\d+)?)mm/i);
-    if (shiftMatch) {
-      let axis = null;
-      if (source === "DOSX_SW") axis = "X";
-      if (source === "DOSY_SW") axis = "Y";
-
-      if (!axis) continue;
-
-      shiftEvents.push({
-        tcTimeMs: row.tcTimeMs,
-        tcTimestamp: row["TC Timestamp"],
-        axis,
-        shift: Number(shiftMatch[1])
-      });
-    }
-  }
+  angleEvents.sort((a, b) => a.tcTimeMs - b.tcTimeMs);
+  shiftEvents.sort((a, b) => a.tcTimeMs - b.tcTimeMs);
 
   return buildShiftRows(angleEvents, shiftEvents);
+}
+
+async function parseTcShiftFileStream(file, angleEvents, shiftEvents) {
+  if (!file.stream || typeof TextDecoder === "undefined") {
+    const text = await file.text();
+    parseTcShiftTextDirect(text, angleEvents, shiftEvents);
+    return;
+  }
+
+  const reader = file.stream().getReader();
+  const decoder = new TextDecoder("utf-8");
+  let buffer = "";
+  let headerIndexes = null;
+
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+
+      let lineBreakIndex = findLineBreak(buffer);
+      while (lineBreakIndex !== -1) {
+        const line = buffer.slice(0, lineBreakIndex).replace(/\r$/, "");
+        buffer = buffer.slice(lineBreakIndex + 1);
+        headerIndexes = parseTcShiftRelevantLine(line, headerIndexes, angleEvents, shiftEvents);
+        lineBreakIndex = findLineBreak(buffer);
+      }
+
+      if (done) break;
+    }
+
+    if (buffer) {
+      headerIndexes = parseTcShiftRelevantLine(buffer.replace(/\r$/, ""), headerIndexes, angleEvents, shiftEvents);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+function parseTcShiftTextDirect(text, angleEvents, shiftEvents) {
+  let headerIndexes = null;
+  let start = 0;
+
+  if (text.charCodeAt(0) === 0xfeff) {
+    start = 1;
+  }
+
+  for (let i = start; i <= text.length; i += 1) {
+    if (i === text.length || text[i] === "\n") {
+      const line = text.slice(start, i).replace(/\r$/, "");
+      headerIndexes = parseTcShiftRelevantLine(line, headerIndexes, angleEvents, shiftEvents);
+      start = i + 1;
+    }
+  }
+}
+
+function parseTcShiftRelevantLine(line, headerIndexes, angleEvents, shiftEvents) {
+  if (!line) return headerIndexes;
+
+  if (!headerIndexes) {
+    const cleanLine = line.replace(/^\uFEFF/, "");
+    const header = parseCsvLine(cleanLine);
+    return {
+      timestamp: header.indexOf("TC Timestamp"),
+      source: header.indexOf("Source"),
+      message: header.indexOf("Message Text")
+    };
+  }
+
+  if (line.indexOf("readback: gantry angle") === -1 && line.indexOf("Storing initial layer shift") === -1) {
+    return headerIndexes;
+  }
+
+  const cols = parseCsvLine(line);
+  const tcTimestamp = cols[headerIndexes.timestamp] || "";
+  const tcTimeMs = parseTcTimestamp(tcTimestamp);
+
+  if (Number.isNaN(tcTimeMs)) return headerIndexes;
+
+  const message = cols[headerIndexes.message] || "";
+
+  const angleMatch = message.match(/readback:\s*gantry angle\s*(-?\d+(?:\.\d+)?)/i);
+  if (angleMatch) {
+    angleEvents.push({
+      tcTimeMs,
+      tcTimestamp,
+      angle: Number(angleMatch[1])
+    });
+    return headerIndexes;
+  }
+
+  const shiftMatch = message.match(/Storing initial layer shift of\s*(-?\d+(?:\.\d+)?)mm/i);
+  if (!shiftMatch) return headerIndexes;
+
+  const source = cols[headerIndexes.source] || "";
+  let axis = null;
+  if (source === "DOSX_SW") axis = "X";
+  if (source === "DOSY_SW") axis = "Y";
+  if (!axis) return headerIndexes;
+
+  shiftEvents.push({
+    tcTimeMs,
+    tcTimestamp,
+    axis,
+    shift: Number(shiftMatch[1])
+  });
+
+  return headerIndexes;
+}
+
+function findLineBreak(text) {
+  return text.indexOf("\n");
 }
 
 function buildShiftRows(angleEvents, shiftEvents) {
@@ -1040,6 +1136,22 @@ function formatDatePart(timestamp) {
 function formatTimePart(timestamp) {
   const parts = String(timestamp).split(" ");
   return parts[1] || "";
+}
+
+function formatAnalysisElapsed(elapsedMs) {
+  if (elapsedMs < 1000) {
+    return `${Math.max(0.1, elapsedMs / 1000).toFixed(1)} s`;
+  }
+
+  const totalSeconds = Math.round(elapsedMs / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  if (minutes <= 0) {
+    return `${seconds} s`;
+  }
+
+  return `${minutes} min ${seconds} s`;
 }
 
 function formatFileSize(size) {
