@@ -121,7 +121,22 @@ document.addEventListener("DOMContentLoaded", () => {
   homeBtn.title = "Home";
   homeBtn.style.marginTop = "4px";
 
+  const downloadBtn = document.createElement("a");
+  downloadBtn.className = "menu-toggle-btn download-nav-btn";
+  downloadBtn.href = "./downloads/mevion_webtool_current.zip";
+  downloadBtn.download = "mevion_webtool_current.zip";
+  downloadBtn.title = "下载当前 Webtool zip";
+  downloadBtn.setAttribute("aria-label", "下载当前 Webtool zip");
+  downloadBtn.innerHTML = `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 3v11"></path>
+      <path d="M7.5 9.5 12 14l4.5-4.5"></path>
+      <path d="M5 18h14"></path>
+    </svg>
+  `;
+
   toggleBtn.insertAdjacentElement("afterend", homeBtn);
+  homeBtn.insertAdjacentElement("afterend", downloadBtn);
 
   homeBtn.addEventListener("click", () => {
     if (typeof setPage === "function") {

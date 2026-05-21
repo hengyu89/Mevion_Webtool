@@ -105,3 +105,24 @@
   margin-bottom: 4px;
 }
 
+
+.download-nav-btn {
+  margin-top: 4px;
+  text-decoration: none;
+  align-items: center;
+}
+
+.download-nav-btn svg {
+  width: 20px;
+  height: 20px;
+  margin: auto;
+  fill: none;
+  stroke: #222;
+  stroke-width: 2.1;
+  stroke-linecap: square;
+  stroke-linejoin: miter;
+}
+
+.app-shell.sidebar-expanded .download-nav-btn {
+  display: none !important;
+}
