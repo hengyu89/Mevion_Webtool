@@ -104,6 +104,10 @@ function initPageModule(pageId) {
   if (pageId === "tool-patient-counter") {
     initPatientCounterToolPage();
   }
+
+  if (pageId === "tool-tic-monitor") {
+    initTicMonitorToolPage();
+  }
 }
 
 document.addEventListener("DOMContentLoaded", () => {

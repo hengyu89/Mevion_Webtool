@@ -1,0 +1,116 @@
+/* TIC Monitor tool. Keeps the existing Service Mode / HMI visual language. */
+
+.tic-monitor-tool {
+  width: 100%;
+}
+
+.tic-file-status.done {
+  color: var(--green);
+  font-weight: 800;
+}
+
+.tic-file-status.error {
+  color: var(--red);
+  font-weight: 800;
+}
+
+.tic-summary-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin: 4px 0 0;
+}
+
+.tic-summary-row .summary-card {
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+.tic-sample-card {
+  min-width: 82px;
+  width: 82px;
+}
+
+.tic-time-range {
+  min-width: 240px;
+  width: 240px;
+}
+
+.tic-charts-root {
+  display: grid;
+  gap: 8px;
+  margin-top: 0;
+}
+
+.tic-chart-card {
+  text-align: left;
+  min-height: 0;
+  padding-bottom: 10px;
+  margin-top: 2px;
+}
+
+.tic-chart-top {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.tic-chart-title {
+  font-weight: 900;
+  font-size: 15px;
+  margin-bottom: 8px;
+}
+
+.tic-toggle-group {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 18px;
+}
+
+.tic-check-item {
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+.tic-check-item input {
+  width: 18px;
+  height: 18px;
+}
+
+.tic-legend-dot {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  margin: 0 5px 0 2px;
+  border: 0;
+  border-radius: 50%;
+  vertical-align: -1px;
+}
+
+.tic-chart-wrap {
+  position: relative;
+  width: 900px;
+  max-width: 900px;
+  min-width: 900px;
+  height: 420px;
+  max-height: 420px;
+  margin: 6px 0 0 0;
+  overflow: visible;
+  background: #efefef;
+}
+
+.tic-chart-wrap canvas {
+  display: block;
+  width: 900px;
+  height: 420px;
+  max-width: 900px;
+  max-height: 420px;
+  cursor: crosshair;
+}
+
+.tic-empty {
+  padding: 10px;
+}
+
+

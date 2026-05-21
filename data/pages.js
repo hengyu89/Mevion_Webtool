@@ -26,7 +26,8 @@ const menuData = [
     title: "Tools",
     children: [
       { id: "tool-tc-shift", title: "Scanning Magnet Shift" },
-      { id: "tool-patient-counter", title: "Patient Counter" }
+      { id: "tool-patient-counter", title: "Patient Counter" },
+      { id: "tool-tic-monitor", title: "TIC Monitor" }
     ]
   },
   {
@@ -63,6 +64,12 @@ const pageContent = {
             desc: "导入文件计算目前治疗人数",
             pageId: "tool-patient-counter",
             icon: ""
+          },
+          {
+            label: "TIC 温度/气压",
+            desc: "导入文件绘制 TIC 温度和气压趋势点图",
+            pageId: "tool-tic-monitor",
+            icon: ""
           }
         ]
       },
@@ -80,6 +87,12 @@ const pageContent = {
             label: "病人计数器",
             desc: "导入文件计算目前治疗人数",
             pageId: "tool-patient-counter",
+            icon: ""
+          },
+          {
+            label: "TIC 温度/气压",
+            desc: "导入文件绘制 TIC 温度和气压趋势点图",
+            pageId: "tool-tic-monitor",
             icon: ""
           }
         ]
@@ -353,6 +366,12 @@ const pageContent = {
             desc: "导入文件计算目前治疗人数",
             pageId: "tool-patient-counter",
             icon: ""
+          },
+          {
+            label: "TIC 温度/气压",
+            desc: "导入文件绘制 TIC 温度和气压趋势点图",
+            pageId: "tool-tic-monitor",
+            icon: ""
           }
         ]
       }
@@ -413,6 +432,22 @@ const pageContent = {
         title: "工具区",
         type: "custom",
         customId: "patientCounterToolRoot"
+      }
+    ],
+    side: []
+  },
+
+  "tool-tic-monitor": {
+    hero: {
+      tag: "",
+      title: "TIC 温度/气压",
+      desc: "导入 TCLogger 文件，提取 US TIC、DS TIC X、DS TIC Y 的温度和气压并绘图"
+    },
+    sections: [
+      {
+        title: "工具区",
+        type: "custom",
+        customId: "ticMonitorToolRoot"
       }
     ],
     side: []
