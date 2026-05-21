@@ -1,0 +1,122 @@
+/* Patient Counter tool. Uses the existing service/HMI visual language. */
+
+.patient-counter-tool {
+  width: 100%;
+}
+
+.patient-file-status.done {
+  color: var(--green);
+  font-weight: 800;
+}
+
+.patient-file-status.error {
+  color: var(--red);
+  font-weight: 800;
+}
+
+.patient-summary-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0 8px;
+}
+
+.patient-count-card,
+.patient-new-card {
+  font-weight: 800;
+}
+
+.patient-new-card {
+  color: #7a5a00;
+}
+
+.patient-pagination {
+  margin-left: auto;
+}
+
+.patient-table-wrap {
+  min-width: 760px;
+}
+
+.patient-counter-table {
+  table-layout: fixed;
+}
+
+.patient-index-col {
+  width: 46px;
+}
+
+.patient-id-cell {
+  font-weight: 900;
+  letter-spacing: 0.2px;
+}
+
+.patient-fraction-cell {
+  font-weight: 400;
+}
+
+.patient-fraction-cell strong {
+  font-weight: 900;
+}
+
+.patient-new-row {
+  background: #fff7cf;
+}
+
+.patient-new-badge {
+  display: inline-block;
+  min-width: 48px;
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: var(--green-bg);
+  color: var(--green);
+  font-weight: 900;
+  text-align: center;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.patient-normal-badge {
+  color: #888;
+}
+
+.patient-empty {
+  padding: 10px;
+}
+
+.patient-count-card,
+.patient-new-card {
+  min-width: 92px;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.patient-table-wrap {
+  min-width: 980px;
+}
+
+.patient-counter-table th:nth-child(5),
+.patient-counter-table th:nth-child(6),
+.patient-counter-table th:nth-child(7) {
+  width: 92px;
+}
+
+.patient-counter-table th:nth-child(8) {
+  width: 78px;
+}
+
+.patient-counter-table th:nth-child(9) {
+  width: 132px;
+}
+
+
+.patient-counter-table td:nth-child(8),
+.patient-counter-table th:nth-child(8) {
+  white-space: nowrap;
+  width: 112px;
+}
+
+.patient-counter-table th:nth-child(4) {
+  width: 76px;
+}

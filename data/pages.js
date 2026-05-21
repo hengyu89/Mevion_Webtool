@@ -23,10 +23,15 @@ const menuData = [
   },
   {
     id: "tools",
-    title: "工具",
+    title: "Tools",
     children: [
-      { id: "tool-tc-shift", title: "Scanning Magnet Shift" }
+      { id: "tool-tc-shift", title: "Scanning Magnet Shift" },
+      { id: "tool-patient-counter", title: "Patient Counter" }
     ]
+  },
+  {
+    id: "daily-analyzer",
+    title: "Daily Analyzer"
   }
 ];
 
@@ -52,16 +57,31 @@ const pageContent = {
             desc: "TCLogger layer shift 提取、统计、offset 计算与绘图",
             pageId: "tool-tc-shift",
             icon: ""
+          },
+          {
+            label: "病人计数器",
+            desc: "导入文件计算目前治疗人数",
+            pageId: "tool-patient-counter",
+            icon: ""
           }
         ]
       },
       {
-        title: "可放的内容",
-        type: "grid",
+        title: "常用工具",
+        type: "toolLinks",
         items: [
-          { label: "功能 1", value: "Beam 工具入口" },
-          { label: "功能 2", value: "AA 文档整理" },
-          { label: "功能 3", value: "日志分析" }
+          {
+            label: "Scanning Magnet Shift 计算器",
+            desc: "TCLogger layer shift 提取、统计、offset 计算与绘图",
+            pageId: "tool-tc-shift",
+            icon: ""
+          },
+          {
+            label: "病人计数器",
+            desc: "导入文件计算目前治疗人数",
+            pageId: "tool-patient-counter",
+            icon: ""
+          }
         ]
       }
     ],
@@ -314,17 +334,26 @@ const pageContent = {
   tools: {
     hero: {
       tag: "Tools",
-      title: "工具页",
+      title: "Tools",
       desc: "以后你可把所有小工具统一放这里。"
     },
     sections: [
       {
-        title: "预留",
-        type: "grid",
+        title: "常用工具",
+        type: "toolLinks",
         items: [
-          { label: "Regex 小工具", value: "待制作" },
-          { label: "日志过滤", value: "待制作" },
-          { label: "参数换算", value: "待制作" }
+          {
+            label: "Scanning Magnet Shift 计算器",
+            desc: "TCLogger layer shift 提取、统计、offset 计算与绘图",
+            pageId: "tool-tc-shift",
+            icon: ""
+          },
+          {
+            label: "病人计数器",
+            desc: "导入文件计算目前治疗人数",
+            pageId: "tool-patient-counter",
+            icon: ""
+          }
         ]
       }
     ],
@@ -339,6 +368,24 @@ const pageContent = {
     ]
   },
 
+
+
+  "daily-analyzer": {
+    hero: {
+      tag: "Daily Analyzer",
+      title: "Daily Analyzer",
+      desc: "每日治疗、日志、统计类工具的预留入口。"
+    },
+    sections: [
+      {
+        title: "预留",
+        type: "text",
+        content: "后续可以把日常治疗统计、日报汇总、异常筛选等工具放在这里。"
+      }
+    ],
+    side: []
+  },
+
   "tool-tc-shift": {
     hero: {
       tag: "",
@@ -350,6 +397,22 @@ const pageContent = {
         title: "工具区",
         type: "custom",
         customId: "tcShiftToolRoot"
+      }
+    ],
+    side: []
+  },
+
+  "tool-patient-counter": {
+    hero: {
+      tag: "",
+      title: "病人计数器",
+      desc: "导入文件计算目前治疗人数"
+    },
+    sections: [
+      {
+        title: "工具区",
+        type: "custom",
+        customId: "patientCounterToolRoot"
       }
     ],
     side: []

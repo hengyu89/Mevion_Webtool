@@ -100,6 +100,10 @@ function initPageModule(pageId) {
   if (pageId === "tool-tc-shift") {
     initTcShiftToolPage();
   }
+
+  if (pageId === "tool-patient-counter") {
+    initPatientCounterToolPage();
+  }
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -123,8 +127,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const downloadBtn = document.createElement("a");
   downloadBtn.className = "menu-toggle-btn download-nav-btn";
-  downloadBtn.href = "./downloads/mevion_webtool_current.zip";
-  downloadBtn.download = "mevion_webtool_current.zip";
+  downloadBtn.href = "./downloads/TJH_Tool_v1.0.zip";
+  downloadBtn.download = "TJH_Tool_v1.0.zip";
   downloadBtn.title = "下载当前 Webtool zip";
   downloadBtn.setAttribute("aria-label", "下载当前 Webtool zip");
   downloadBtn.innerHTML = `
