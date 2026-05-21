@@ -1,0 +1,118 @@
+/* Shared Mevion service etched frame styles.
+   Split from original style.css without changing selector order or values. */
+
+.menu-item,
+.submenu-item {
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  text-align: left;
+  background: #bfbfbf;
+  padding: 7px 9px;
+  font-weight: 700;
+  box-shadow:
+    inset 0 1px 0 #666,
+    inset 0 2px 0 #fff,
+    inset 1px 0 0 #666,
+    inset 2px 0 0 #fff,
+    inset 0 -2px 0 #666,
+    inset 0 -1px 0 #fff,
+    inset -2px 0 0 #666,
+    inset -1px 0 0 #fff;
+}
+
+.menu-item.active,
+.menu-item.parent-open,
+.submenu-item.active {
+  background: var(--panel);
+}
+
+.submenu-list {
+  margin: 2px 0 4px 12px;
+}
+
+.submenu-item {
+  padding: 6px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #d3d3d3;
+}
+
+.card,
+.hero-card,
+.section-card,
+.side-card,
+.chart-section-card,
+.tool-file-list,
+.column-toggle-panel,
+.time-exclude-panel,
+.summary-card,
+.info-tile,
+.side-list-item,
+.mini-stat-card,
+.calc-result-card,
+.feature-link-card,
+.tool-table-wrap,
+.tc-table-area,
+.tc-inline-stats-panel,
+.file-drop-zone {
+  position: relative;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: var(--panel);
+  overflow: visible;
+}
+
+.card::before,
+.hero-card::before,
+.section-card::before,
+.side-card::before,
+.chart-section-card::before,
+.tool-file-list::before,
+.column-toggle-panel::before,
+.time-exclude-panel::before,
+.summary-card::before,
+.info-tile::before,
+.side-list-item::before,
+.mini-stat-card::before,
+.calc-result-card::before,
+.feature-link-card::before,
+.tool-table-wrap::before,
+.tc-table-area::before,
+.tc-inline-stats-panel::before,
+.file-drop-zone::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  background:
+    linear-gradient(to bottom, var(--line-dark) 0 1px, var(--line-light) 1px 2px, transparent 2px) left top / 100% 2px no-repeat,
+    linear-gradient(to bottom, var(--line-dark) 0 1px, var(--line-light) 1px 2px) left bottom / 100% 2px no-repeat,
+    linear-gradient(to right, var(--line-dark) 0 1px, var(--line-light) 1px 2px, transparent 2px) left top / 2px 100% no-repeat,
+    linear-gradient(to right, var(--line-dark) 0 1px, var(--line-light) 1px 2px) right top / 2px 100% no-repeat;
+}
+
+.card > *,
+.hero-card > *,
+.section-card > *,
+.side-card > *,
+.chart-section-card > *,
+.tool-file-list > *,
+.column-toggle-panel > *,
+.time-exclude-panel > *,
+.summary-card > *,
+.info-tile > *,
+.side-list-item > *,
+.mini-stat-card > *,
+.calc-result-card > *,
+.feature-link-card > *,
+.tool-table-wrap > *,
+.tc-table-area > *,
+.tc-inline-stats-panel > *,
+.file-drop-zone > * {
+  position: relative;
+  z-index: 3;
+}
+

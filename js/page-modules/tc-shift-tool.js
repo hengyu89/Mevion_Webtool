@@ -696,6 +696,7 @@ function bindColumnToggleEvents() {
       const col = event.target.dataset.col;
       tcShiftToolState.visibleColumns[col] = event.target.checked;
       renderTcShiftTableAndSummary();
+    drawTcShiftChart();
     });
   });
 }
@@ -746,6 +747,7 @@ function bindSelectionToolbarEvents(pageRows) {
         toggleRowSelection(rowId, selectAllCurrentPageCheckbox.checked);
       });
       renderTcShiftTableAndSummary();
+    drawTcShiftChart();
     });
   }
 
@@ -761,6 +763,7 @@ function bindSelectionToolbarEvents(pageRows) {
       });
 
       renderTcShiftTableAndSummary();
+    drawTcShiftChart();
     });
   }
 
@@ -776,6 +779,7 @@ function bindSelectionToolbarEvents(pageRows) {
       clearSelection();
       renderTcShiftStatsToSide(calculateShiftStats(getActiveRows()));
       renderTcShiftTableAndSummary();
+    drawTcShiftChart();
     });
   }
 
@@ -790,6 +794,7 @@ function bindSelectionToolbarEvents(pageRows) {
       clearSelection();
       renderTcShiftStatsToSide(calculateShiftStats(getActiveRows()));
       renderTcShiftTableAndSummary();
+    drawTcShiftChart();
     });
   }
 
@@ -802,6 +807,7 @@ function bindSelectionToolbarEvents(pageRows) {
       clearSelection();
       renderTcShiftStatsToSide(calculateShiftStats(getActiveRows()));
       renderTcShiftTableAndSummary();
+    drawTcShiftChart();
     });
   }
 
@@ -915,7 +921,7 @@ function bindDragSelectRows() {
       selectionBox.remove();
       selectionBox = null;
     }
-  }, { once: true });
+  });
 }
 
 function bindTableRowSelectionEvents() {
@@ -1175,13 +1181,14 @@ function renderTcShiftStatsToSide(stats) {
 
       <div class="calc-result-wrap">
         <div class="calc-result-card offset-result-card">
-          <div class="mini-stat-label offset-result-label">Y new offset</div>
+          <div class="mini-stat-label offset-result-label">Y (CP) New Offset</div>
           <div id="yNewOffsetOutput" class="mini-stat-value offset-result-value">--</div>
         </div>
         <div class="calc-result-card offset-result-card">
-          <div class="mini-stat-label offset-result-label">X new offset</div>
+          <div class="mini-stat-label offset-result-label">X (IP) New Offset</div>
           <div id="xNewOffsetOutput" class="mini-stat-value offset-result-value">--</div>
         </div>
+        <div class="offset-edit-note">Edit in XYZ.xml → IP/CP offset</div>
       </div>
     </section>
   `;
@@ -1341,7 +1348,7 @@ function buildTcShiftChartSectionHtml() {
       </div>
 
       <div class="chart-canvas-wrap">
-        <canvas id="tcShiftChartCanvas" width="600" height="280"></canvas>
+        <canvas id="tcShiftChartCanvas" width="1200" height="560"></canvas>
       </div>
     </section>
   `;
@@ -1445,10 +1452,10 @@ function bindChartEvents() {
     });
   }
 
-  if (canvas && !tcShiftChartRuntime.mouseBound) {
+  if (canvas && !canvas.dataset.tcHoverBound) {
     canvas.addEventListener("mousemove", handleTcShiftChartMouseMove);
     canvas.addEventListener("mouseleave", handleTcShiftChartMouseLeave);
-    tcShiftChartRuntime.mouseBound = true;
+    canvas.dataset.tcHoverBound = "1";
   }
 }
 
@@ -1457,6 +1464,8 @@ function handleTcShiftChartMouseMove(event) {
   if (!canvas) return;
 
   const rect = canvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+
   const scaleX = canvas.width / rect.width;
   const scaleY = canvas.height / rect.height;
 
@@ -1472,7 +1481,7 @@ function handleTcShiftChartMouseMove(event) {
     const dy = mouseY - point.canvasY;
     const dist = Math.sqrt(dx * dx + dy * dy);
 
-    if (dist <= 10 && dist < nearestDist) {
+    if (dist <= 18 && dist < nearestDist) {
       nearest = point;
       nearestDist = dist;
     }
@@ -1654,14 +1663,26 @@ function drawTcShiftChart() {
     maxX += 1000;
   }
 
+  // v13: 固定常规视野为 -2.5 ~ +2.5。
+  // 只有当数据超出该范围时，才按对应方向扩展到极值外一点。
+  const allYValues = combined
+    .map((p) => Number(p.y))
+    .filter((v) => Number.isFinite(v));
+
+  if (allYValues.length) {
+    const rawMinY = Math.min(...allYValues);
+    const rawMaxY = Math.max(...allYValues);
+    minY = rawMinY < -2.5 ? rawMinY - 0.1 : -2.5;
+    maxY = rawMaxY > 2.5 ? rawMaxY + 0.1 : 2.5;
+  } else {
+    minY = -2.5;
+    maxY = 2.5;
+  }
+
   if (minY === maxY) {
     minY -= 1;
     maxY += 1;
   }
-
-  const yPadding = (maxY - minY) * 0.15;
-  minY -= yPadding;
-  maxY += yPadding;
 
   function mapX(value) {
     return padding.left + ((value - minX) / (maxX - minX)) * plotWidth;

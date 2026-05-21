@@ -1,0 +1,129 @@
+/* Home page cards, feature links, info tiles.
+   Split from original style.css without changing selector order or values. */
+
+.hero-card {
+  padding: 10px 12px 9px;
+  margin-bottom: 12px;
+}
+
+.hero-tag {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.hero-title {
+  margin-top: 2px;
+  font-size: 16px;
+  line-height: 1.15;
+  font-weight: 900;
+}
+
+.hero-desc,
+.content-text,
+.empty-text {
+  color: #333;
+  line-height: 1.45;
+}
+
+.section-card,
+.side-card,
+.chart-section-card {
+  margin-top: 16px;
+  padding: 16px 8px 8px;
+}
+
+.section-title,
+.side-card-title {
+  position: absolute;
+  top: -9px;
+  left: 8px;
+  margin: 0;
+  padding: 0 5px;
+  background: var(--panel);
+  border: 0;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.1;
+  font-weight: 800;
+  z-index: 4;
+}
+
+.info-grid,
+.feature-link-grid {
+  display: grid;
+  grid-template-columns: repeat(3, max-content);
+  justify-content: start;
+  align-items: start;
+  column-gap: 10px;
+  row-gap: 8px;
+}
+
+.info-tile,
+.feature-link-card {
+  width: max-content;
+  min-width: 170px;
+  padding: 7px 12px;
+}
+
+.info-tile-label {
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 3px;
+}
+
+.info-tile-value,
+.feature-link-title {
+  font-weight: 800;
+}
+
+.feature-link-card {
+  min-width: 0;
+  min-height: 40px;
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 0;
+  text-align: left;
+}
+
+.feature-link-title::before {
+  content: "⭐ ";
+  font-size: .9em;
+}
+
+.feature-link-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.feature-link-desc {
+  max-width: none;
+  white-space: nowrap;
+  overflow: visible;
+  color: #555;
+  font-size: 12px;
+}
+
+.feature-link-icon {
+  display: none;
+}
+
+.side-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.side-list-item {
+  padding: 7px 8px;
+}
+
+.notice-badge {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 4px;
+  background: #c9c9c9;
+  font-size: 11px;
+  font-weight: 800;
+}
+

@@ -110,3 +110,34 @@ document.addEventListener("DOMContentLoaded", () => {
   setPage(state.currentPageId);
   console.log("App initialized");
 });
+
+document.addEventListener("DOMContentLoaded", () => {
+  const toggleBtn = document.querySelector(".menu-toggle-btn");
+  if (!toggleBtn) return;
+
+  const homeBtn = document.createElement("button");
+  homeBtn.className = "menu-toggle-btn home-nav-btn";
+  homeBtn.innerHTML = "⌂";
+  homeBtn.title = "Home";
+  homeBtn.style.marginTop = "4px";
+
+  toggleBtn.insertAdjacentElement("afterend", homeBtn);
+
+  homeBtn.addEventListener("click", () => {
+    if (typeof setPage === "function") {
+      setPage("home");
+    } else {
+      location.hash = "#home";
+    }
+  });
+});
+
+window.addEventListener("mouseup", () => {
+  document.querySelectorAll(
+    ".selection-box,.drag-selection-box,.selection-rect"
+  ).forEach(el => {
+    try {
+      el.remove();
+    } catch(e){}
+  });
+});
