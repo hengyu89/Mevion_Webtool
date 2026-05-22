@@ -4,26 +4,8 @@ const menuData = [
     title: "首页"
   },
   {
-    id: "beam",
-    title: "Beam",
-    children: [
-      { id: "beam-overview", title: "Beam.1 总览" },
-      { id: "beam-gauss", title: "Beam.2 高斯拟合" },
-      { id: "beam-map", title: "Beam.3 数据映射" }
-    ]
-  },
-  {
-    id: "aa",
-    title: "AA",
-    children: [
-      { id: "aa-overview", title: "AA.1 总览" },
-      { id: "aa-issues", title: "AA.2 Common Issues" },
-      { id: "aa-notes", title: "AA.3 维修笔记" }
-    ]
-  },
-  {
     id: "tools",
-    title: "Tools",
+    title: "TC Logger",
     children: [
       { id: "tool-tc-shift", title: "Scanning Magnet Shift" },
       { id: "tool-patient-counter", title: "Patient Counter" },
@@ -31,8 +13,12 @@ const menuData = [
     ]
   },
   {
-    id: "daily-analyzer",
-    title: "Daily Analyzer"
+    id: "daily-beam",
+    title: "Daily Beam",
+    children: [
+      { id: "daily-no-scanning", title: "No Scanning" },
+      { id: "daily-tic-sweep", title: "TIC Sweep" }
+    ]
   }
 ];
 
@@ -40,14 +26,14 @@ const pageContent = {
   home: {
     hero: {
       tag: "Welcome",
-      title: "Mevion Webtool",
-      desc: "这是你的静态工具站骨架。左侧菜单可展开，点击不同条目时，中间主内容和右侧附带内容会切换。后面你只需要继续往数据里填真实内容。"
+      title: "On-site Tools",
+      desc: "该网站的初衷为集成各个便利的分析工具，提高现场分析数据效率。注意所有工具仅用于分析，因其并非是官方工具，所以数据结果禁止作为现象证据。另外该网页仅有工具，没有保存任何敏感数据，已保存内容仅会保存于您的本地电脑，可放心使用。"
     },
     sections: [
       {
-        title: "当前状态",
+        title: "更新内容",
         type: "text",
-        content: "这版已经具备固定背景、毛玻璃容器、三列布局、菜单展开、高亮当前项，以及动态内容切换。适合继续往里长真正的工具和笔记。"
+        content: "1. 已创建工具「Layer Shift 计算器」「病人计数器」和「TIC 温度/气压与时间关系图」；<br>2. 左侧下载图表可将全工具下载到您的电脑本地，方便任意时间离线使用；<br>3. TC Logger 菜单在一个工具页面上传文件后，切到其它工具页面时无需再上传，工具在切换到当前页面后会自动分析。"
       },
       {
         title: "新功能",
@@ -55,19 +41,19 @@ const pageContent = {
         items: [
           {
             label: "Scanning Magnet Shift 计算器",
-            desc: "TCLogger layer shift 提取、统计、offset 计算与绘图",
+            desc: "Layer Shift 提取、offset 计算、绘图",
             pageId: "tool-tc-shift",
             icon: ""
           },
           {
             label: "病人计数器",
-            desc: "导入文件计算目前治疗人数",
+            desc: "计算已治疗人数",
             pageId: "tool-patient-counter",
             icon: ""
           },
           {
             label: "TIC 温度/气压",
-            desc: "导入文件绘制 TIC 温度和气压趋势点图",
+            desc: "绘图 TIC Temp / Pressure 与时间关系",
             pageId: "tool-tic-monitor",
             icon: ""
           }
@@ -79,19 +65,19 @@ const pageContent = {
         items: [
           {
             label: "Scanning Magnet Shift 计算器",
-            desc: "TCLogger layer shift 提取、统计、offset 计算与绘图",
+            desc: "Layer Shift 提取、offset 计算、绘图",
             pageId: "tool-tc-shift",
             icon: ""
           },
           {
             label: "病人计数器",
-            desc: "导入文件计算目前治疗人数",
+            desc: "计算已治疗人数",
             pageId: "tool-patient-counter",
             icon: ""
           },
           {
             label: "TIC 温度/气压",
-            desc: "导入文件绘制 TIC 温度和气压趋势点图",
+            desc: "绘图 TIC Temp / Pressure 与时间关系",
             pageId: "tool-tic-monitor",
             icon: ""
           }
@@ -346,9 +332,9 @@ const pageContent = {
 
   tools: {
     hero: {
-      tag: "Tools",
-      title: "Tools",
-      desc: "以后你可把所有小工具统一放这里。"
+      tag: "",
+      title: "TC Logger 相关工具",
+      desc: "该菜单包含了仅上传 TC Logger 即可生成数据的工具。"
     },
     sections: [
       {
@@ -357,19 +343,19 @@ const pageContent = {
         items: [
           {
             label: "Scanning Magnet Shift 计算器",
-            desc: "TCLogger layer shift 提取、统计、offset 计算与绘图",
+            desc: "Layer Shift 提取、offset 计算、绘图",
             pageId: "tool-tc-shift",
             icon: ""
           },
           {
             label: "病人计数器",
-            desc: "导入文件计算目前治疗人数",
+            desc: "计算已治疗人数",
             pageId: "tool-patient-counter",
             icon: ""
           },
           {
             label: "TIC 温度/气压",
-            desc: "导入文件绘制 TIC 温度和气压趋势点图",
+            desc: "绘图 TIC Temp / Pressure 与时间关系",
             pageId: "tool-tic-monitor",
             icon: ""
           }
@@ -389,17 +375,80 @@ const pageContent = {
 
 
 
-  "daily-analyzer": {
+  "daily-beam": {
     hero: {
-      tag: "Daily Analyzer",
-      title: "Daily Analyzer",
-      desc: "每日治疗、日志、统计类工具的预留入口。"
+      tag: "",
+      title: "Daily Beam Analyzer",
+      desc: "该菜单包含每日数据、周报分析相关工具。"
     },
     sections: [
       {
-        title: "预留",
+        title: "新功能",
+        type: "toolLinks",
+        items: [
+          {
+            label: "No Scanning",
+            desc: "预留：No Scanning 相关每日数据分析",
+            pageId: "daily-no-scanning",
+            icon: ""
+          },
+          {
+            label: "TIC Sweep",
+            desc: "预留：TIC Sweep 相关每日数据分析",
+            pageId: "daily-tic-sweep",
+            icon: ""
+          }
+        ]
+      },
+      {
+        title: "常用工具",
+        type: "toolLinks",
+        items: [
+          {
+            label: "No Scanning",
+            desc: "预留：No Scanning 相关每日数据分析",
+            pageId: "daily-no-scanning",
+            icon: ""
+          },
+          {
+            label: "TIC Sweep",
+            desc: "预留：TIC Sweep 相关每日数据分析",
+            pageId: "daily-tic-sweep",
+            icon: ""
+          }
+        ]
+      }
+    ],
+    side: []
+  },
+
+  "daily-no-scanning": {
+    hero: {
+      tag: "",
+      title: "No Scanning",
+      desc: "No Scanning 相关每日数据分析工具预留页。"
+    },
+    sections: [
+      {
+        title: "工具区",
         type: "text",
-        content: "后续可以把日常治疗统计、日报汇总、异常筛选等工具放在这里。"
+        content: "该工具页面暂未接入具体分析逻辑。"
+      }
+    ],
+    side: []
+  },
+
+  "daily-tic-sweep": {
+    hero: {
+      tag: "",
+      title: "TIC Sweep",
+      desc: "TIC Sweep 相关每日数据分析工具预留页。"
+    },
+    sections: [
+      {
+        title: "工具区",
+        type: "text",
+        content: "该工具页面暂未接入具体分析逻辑。"
       }
     ],
     side: []
@@ -425,7 +474,7 @@ const pageContent = {
     hero: {
       tag: "",
       title: "病人计数器",
-      desc: "导入文件计算目前治疗人数"
+      desc: "计算已治疗人数"
     },
     sections: [
       {

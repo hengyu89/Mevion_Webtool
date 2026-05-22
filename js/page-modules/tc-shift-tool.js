@@ -115,9 +115,22 @@ function parseCustomAngleInput(value) {
   return num;
 }
 
+function updateTcShiftToolStatus(type, message) {
+  if (!window.ToolStatusRegistry || typeof window.ToolStatusRegistry.setStatus !== "function") return;
+  const statusMap = {
+    idle: "idle",
+    running: "running",
+    done: "done",
+    error: "error"
+  };
+  window.ToolStatusRegistry.setStatus("tool-tc-shift", statusMap[type] || "idle", message || "");
+}
+
 function initTcShiftToolPage() {
   const root = document.getElementById("tcShiftToolRoot");
   if (!root) return;
+  if (root.dataset.initialized === "true") return;
+  root.dataset.initialized = "true";
 
     tcShiftToolState.allRows = [];
     tcShiftToolState.currentPage = 1;
@@ -175,12 +188,14 @@ function bindTcShiftToolEvents() {
   if (!dropZone || !fileInput) return;
 
   let selectedFiles = [];
+  let loadedFileKey = "";
 
   function setFileStatus(message, type = "idle") {
     const fileList = document.getElementById("tcFileList");
     if (!fileList) return;
     fileList.className = `tool-file-list tc-file-status ${type}`;
     fileList.textContent = message;
+    updateTcShiftToolStatus(type, message);
   }
 
   async function analyzeSelectedFiles() {
@@ -228,8 +243,25 @@ function bindTcShiftToolEvents() {
     selectedFiles = Array.from(fileListLike || []).filter((file) =>
       file.name.toLowerCase().endsWith(".csv")
     );
+    if (window.TcLogFileStore) {
+      window.TcLogFileStore.setFiles(selectedFiles);
+      loadedFileKey = window.TcLogFileStore.getFileKey();
+    }
     analyzeSelectedFiles();
   }
+
+  function loadSharedFilesIfNeeded() {
+    if (!window.TcLogFileStore || !window.TcLogFileStore.hasFiles()) return;
+
+    const sharedFileKey = window.TcLogFileStore.getFileKey();
+    if (!sharedFileKey || sharedFileKey === loadedFileKey) return;
+
+    selectedFiles = window.TcLogFileStore.getFiles();
+    loadedFileKey = sharedFileKey;
+    analyzeSelectedFiles();
+  }
+
+  window.activateTcShiftToolPage = loadSharedFilesIfNeeded;
 
   dropZone.addEventListener("click", () => fileInput.click());
 
@@ -251,6 +283,8 @@ function bindTcShiftToolEvents() {
     dropZone.classList.remove("dragover");
     setFiles(event.dataTransfer.files);
   });
+
+  loadSharedFilesIfNeeded();
 }
 
 async function parseTcShiftFiles(files, onProgress) {

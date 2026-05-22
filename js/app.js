@@ -99,14 +99,23 @@ function initBackgroundFallback() {
 function initPageModule(pageId) {
   if (pageId === "tool-tc-shift") {
     initTcShiftToolPage();
+    if (typeof window.activateTcShiftToolPage === "function") {
+      window.activateTcShiftToolPage();
+    }
   }
 
   if (pageId === "tool-patient-counter") {
     initPatientCounterToolPage();
+    if (typeof window.activatePatientCounterToolPage === "function") {
+      window.activatePatientCounterToolPage();
+    }
   }
 
   if (pageId === "tool-tic-monitor") {
     initTicMonitorToolPage();
+    if (typeof window.activateTicMonitorToolPage === "function") {
+      window.activateTicMonitorToolPage();
+    }
   }
 }
 

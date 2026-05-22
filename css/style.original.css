@@ -354,7 +354,7 @@ button {
   text-align: left;
 }
 
-.feature-link-title::before {
+.feature-section-new .feature-link-title::before {
   content: "⭐ ";
   font-size: .9em;
 }

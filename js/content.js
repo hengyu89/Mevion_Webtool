@@ -1,17 +1,15 @@
-function renderMainContent(pageId) {
-  const mainContent = document.getElementById("mainContent");
-  if (!mainContent) return;
+const pageDomCache = new Map();
 
+function buildMainContentHtml(pageId) {
   const page = pageContent[pageId];
 
   if (!page) {
-    mainContent.innerHTML = `
+    return `
       <div class="card section-card">
         <h2 class="section-title">未找到页面</h2>
         <div class="content-text">当前 pageId = ${pageId}，但没有对应内容。</div>
       </div>
     `;
-    return;
   }
 
   let html = "";
@@ -20,11 +18,18 @@ function renderMainContent(pageId) {
     ? `style="--hero-image: url('${page.hero.image}')"`
     : "";
 
+  const toolSwitcherHtml = buildToolStatusSwitcherHtml(pageId);
+
   html += `
     <section class="card hero-card" ${heroStyle}>
-      <div class="hero-tag">${page.hero.tag || ""}</div>
-      <div class="hero-title">${page.hero.title || ""}</div>
-      <div class="hero-desc">${page.hero.desc || ""}</div>
+      <div class="hero-main-block">
+        <div class="hero-tag">${page.hero.tag || ""}</div>
+        <div class="hero-title-row">
+          <div class="hero-title">${page.hero.title || ""}</div>
+          ${toolSwitcherHtml}
+        </div>
+        <div class="hero-desc">${page.hero.desc || ""}</div>
+      </div>
     </section>
   `;
 
@@ -60,7 +65,7 @@ function renderMainContent(pageId) {
 
     if (section.type === "toolLinks") {
       html += `
-        <section class="card section-card feature-section-card">
+        <section class="card section-card feature-section-card ${section.title === "新功能" ? "feature-section-new" : ""}">
           <h2 class="section-title">${section.title}</h2>
           <div class="feature-link-grid">
             ${(section.items || [])
@@ -91,8 +96,39 @@ function renderMainContent(pageId) {
     }
   });
 
-  mainContent.innerHTML = html;
-  bindMainContentNavigation(mainContent);
+  return html;
+}
+
+function buildToolStatusSwitcherHtml(pageId) {
+  if (pageId !== "tools" && !String(pageId || "").startsWith("tool-")) return "";
+  if (!window.ToolStatusRegistry || typeof window.ToolStatusRegistry.renderSwitcherHtml !== "function") return "";
+  return window.ToolStatusRegistry.renderSwitcherHtml(pageId);
+}
+
+function renderMainContent(pageId) {
+  const mainContent = document.getElementById("mainContent");
+  if (!mainContent) return;
+
+  let pageNode = pageDomCache.get(pageId);
+
+  if (!pageNode) {
+    pageNode = document.createElement("div");
+    pageNode.className = "cached-page";
+    pageNode.dataset.pageId = pageId;
+    pageNode.innerHTML = buildMainContentHtml(pageId);
+    bindMainContentNavigation(pageNode);
+    bindToolStatusSwitcherNavigation(pageNode);
+    pageDomCache.set(pageId, pageNode);
+    mainContent.appendChild(pageNode);
+  }
+
+  pageDomCache.forEach((node, cachedPageId) => {
+    node.hidden = cachedPageId !== pageId;
+  });
+
+  if (window.ToolStatusRegistry && typeof window.ToolStatusRegistry.updateActive === "function") {
+    window.ToolStatusRegistry.updateActive(pageId);
+  }
 }
 
 function bindMainContentNavigation(mainContent) {
@@ -100,6 +136,18 @@ function bindMainContentNavigation(mainContent) {
     item.addEventListener("click", () => {
       if (typeof setPage === "function") {
         setPage(item.dataset.pageId);
+      }
+    });
+  });
+}
+
+function bindToolStatusSwitcherNavigation(mainContent) {
+  mainContent.querySelectorAll(".tool-status-switcher").forEach((switcher) => {
+    switcher.addEventListener("click", (event) => {
+      const btn = event.target.closest("button[data-tool-page-id]");
+      if (!btn) return;
+      if (typeof setPage === "function") {
+        setPage(btn.dataset.toolPageId);
       }
     });
   });

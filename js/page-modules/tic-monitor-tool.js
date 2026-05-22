@@ -19,9 +19,22 @@ const TIC_COLORS = {
   "DS TIC Y": "#c46a00"
 };
 
+function updateTicMonitorToolStatus(type, message) {
+  if (!window.ToolStatusRegistry || typeof window.ToolStatusRegistry.setStatus !== "function") return;
+  const statusMap = {
+    idle: "idle",
+    running: "running",
+    done: "done",
+    error: "error"
+  };
+  window.ToolStatusRegistry.setStatus("tool-tic-monitor", statusMap[type] || "idle", message || "");
+}
+
 function initTicMonitorToolPage() {
   const root = document.getElementById("ticMonitorToolRoot");
   if (!root) return;
+  if (root.dataset.initialized === "true") return;
+  root.dataset.initialized = "true";
 
   ticMonitorState.points = [];
   ticMonitorState.visible = {
@@ -53,12 +66,14 @@ function bindTicMonitorEvents() {
   if (!dropZone || !fileInput) return;
 
   let selectedFiles = [];
+  let loadedFileKey = "";
 
   function setStatus(message, type = "idle") {
     const status = document.getElementById("ticFileStatus");
     if (!status) return;
     status.className = `tool-file-list tic-file-status ${type}`;
     status.textContent = message;
+    updateTicMonitorToolStatus(type, message);
   }
 
   async function analyzeSelectedFiles() {
@@ -97,8 +112,25 @@ function bindTicMonitorEvents() {
     selectedFiles = Array.from(fileListLike || []).filter((file) =>
       file.name.toLowerCase().endsWith(".csv")
     );
+    if (window.TcLogFileStore) {
+      window.TcLogFileStore.setFiles(selectedFiles);
+      loadedFileKey = window.TcLogFileStore.getFileKey();
+    }
     analyzeSelectedFiles();
   }
+
+  function loadSharedFilesIfNeeded() {
+    if (!window.TcLogFileStore || !window.TcLogFileStore.hasFiles()) return;
+
+    const sharedFileKey = window.TcLogFileStore.getFileKey();
+    if (!sharedFileKey || sharedFileKey === loadedFileKey) return;
+
+    selectedFiles = window.TcLogFileStore.getFiles();
+    loadedFileKey = sharedFileKey;
+    analyzeSelectedFiles();
+  }
+
+  window.activateTicMonitorToolPage = loadSharedFilesIfNeeded;
 
   dropZone.addEventListener("click", () => fileInput.click());
   fileInput.addEventListener("change", (event) => setFiles(event.target.files));
@@ -117,6 +149,8 @@ function bindTicMonitorEvents() {
     dropZone.classList.remove("dragover");
     setFiles(event.dataTransfer.files);
   });
+
+  loadSharedFilesIfNeeded();
 }
 
 async function parseTicMonitorFiles(files, onProgress) {
@@ -313,7 +347,7 @@ function drawTicScatterChart(canvas, kind, unit) {
 
   const data = ticMonitorState.points.filter((p) => p.kind === kind && ticMonitorState.visible[p.series]);
   const allKindData = ticMonitorState.points.filter((p) => p.kind === kind);
-  const padding = { left: 98, right: 36, top: 58, bottom: 88 };
+  const padding = { left: 98, right: 36, top: 58, bottom: 96 };
   const plotW = width - padding.left - padding.right;
   const plotH = height - padding.top - padding.bottom;
 
@@ -401,7 +435,7 @@ function drawTicGrid(ctx, padding, plotW, plotH, xMin, xMax, yMin, yMax, unit, x
     ctx.setLineDash([]);
     ctx.fillStyle = "#888";
     ctx.font = "13px Segoe UI";
-    ctx.fillText(formatTicAxisTime(timeMs, xMin, xMax), x, padding.top + plotH + 22);
+    drawTicWrappedXAxisLabel(ctx, formatTicAxisTime(timeMs, xMin, xMax), x, padding.top + plotH + 22);
     ctx.setLineDash([4, 4]);
   });
 
@@ -467,34 +501,33 @@ function getTicSampleCount(points) {
 function getTicTimeAxisTicks(xMin, xMax) {
   if (!Number.isFinite(xMin) || !Number.isFinite(xMax) || xMax <= xMin) return [xMin];
 
+  const span = xMax - xMin;
   const hour = 60 * 60 * 1000;
   const day = 24 * hour;
-  const span = xMax - xMin;
-  let step;
 
-  if (span > 3 * day) {
-    step = day;
-  } else if (span > 1.25 * day) {
-    step = 12 * hour;
-  } else {
-    const preferredIntervals = [1, 2, 3, 4, 6].map((h) => h * hour);
-    step = preferredIntervals.find((interval) => span / interval <= 6) || 8 * hour;
-  }
+  // Same strategy as Scanning Magnet Shift time charts:
+  // use evenly distributed ticks across the visible range instead of enumerating every day
+  // and then slicing the first 9 ticks. The old daily-tick slicing made long ranges
+  // collapse all labels at the left side, e.g. 2025-11 to 2026-05.
+  let intervals = 7;
+  if (span <= 6 * hour) intervals = 6;
+  if (span > 90 * day) intervals = 6;
 
-  const first = Math.ceil(xMin / step) * step;
   const ticks = [];
-  for (let t = first; t <= xMax; t += step) {
-    if (t >= xMin && t <= xMax) ticks.push(t);
+  for (let i = 0; i <= intervals; i += 1) {
+    ticks.push(xMin + (i / intervals) * span);
   }
+  return ticks;
+}
 
-  if (!ticks.length) {
-    const count = 5;
-    for (let i = 0; i <= count; i += 1) {
-      ticks.push(xMin + (i / count) * span);
-    }
+function drawTicWrappedXAxisLabel(ctx, label, x, y) {
+  const parts = String(label).split("\n");
+  if (parts.length === 1) {
+    ctx.fillText(parts[0], x, y);
+    return;
   }
-
-  return ticks.slice(0, 9);
+  ctx.fillText(parts[0], x, y - 7);
+  ctx.fillText(parts[1], x, y + 8);
 }
 
 function getNiceTicScale(values, options = {}) {
@@ -727,7 +760,7 @@ function formatTicAxisTime(timeMs, rangeMin = timeMs, rangeMax = timeMs) {
   const sameDay = new Date(rangeMin).toDateString() === new Date(rangeMax).toDateString();
   const hhmm = `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
   if (sameDay) return hhmm;
-  return `${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")} ${hhmm}`;
+  return `${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}\n${hhmm}`;
 }
 
 function getTicTimeRangeHtml(points) {

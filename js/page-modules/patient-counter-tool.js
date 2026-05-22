@@ -4,9 +4,22 @@ const patientCounterState = {
   pageSize: 30
 };
 
+function updatePatientCounterToolStatus(type, message) {
+  if (!window.ToolStatusRegistry || typeof window.ToolStatusRegistry.setStatus !== "function") return;
+  const statusMap = {
+    idle: "idle",
+    running: "running",
+    done: "done",
+    error: "error"
+  };
+  window.ToolStatusRegistry.setStatus("tool-patient-counter", statusMap[type] || "idle", message || "");
+}
+
 function initPatientCounterToolPage() {
   const root = document.getElementById("patientCounterToolRoot");
   if (!root) return;
+  if (root.dataset.initialized === "true") return;
+  root.dataset.initialized = "true";
 
   patientCounterState.rows = [];
   patientCounterState.currentPage = 1;
@@ -34,12 +47,14 @@ function bindPatientCounterEvents() {
   if (!dropZone || !fileInput) return;
 
   let selectedFiles = [];
+  let loadedFileKey = "";
 
   function setStatus(message, type = "idle") {
     const status = document.getElementById("patientFileStatus");
     if (!status) return;
     status.className = `tool-file-list patient-file-status ${type}`;
     status.textContent = message;
+    updatePatientCounterToolStatus(type, message);
   }
 
   async function analyzeSelectedFiles() {
@@ -83,8 +98,25 @@ function bindPatientCounterEvents() {
     selectedFiles = Array.from(fileListLike || []).filter((file) =>
       file.name.toLowerCase().endsWith(".csv")
     );
+    if (window.TcLogFileStore) {
+      window.TcLogFileStore.setFiles(selectedFiles);
+      loadedFileKey = window.TcLogFileStore.getFileKey();
+    }
     analyzeSelectedFiles();
   }
+
+  function loadSharedFilesIfNeeded() {
+    if (!window.TcLogFileStore || !window.TcLogFileStore.hasFiles()) return;
+
+    const sharedFileKey = window.TcLogFileStore.getFileKey();
+    if (!sharedFileKey || sharedFileKey === loadedFileKey) return;
+
+    selectedFiles = window.TcLogFileStore.getFiles();
+    loadedFileKey = sharedFileKey;
+    analyzeSelectedFiles();
+  }
+
+  window.activatePatientCounterToolPage = loadSharedFilesIfNeeded;
 
   dropZone.addEventListener("click", () => fileInput.click());
 
@@ -106,6 +138,8 @@ function bindPatientCounterEvents() {
     dropZone.classList.remove("dragover");
     setFiles(event.dataTransfer.files);
   });
+
+  loadSharedFilesIfNeeded();
 }
 
 async function parsePatientCounterFiles(files, onProgress) {
