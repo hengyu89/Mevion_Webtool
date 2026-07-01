@@ -38,15 +38,22 @@
     </div>
     <div class="service-status-bar">
       <button id="serviceMenuBtn" class="service-menu-btn" type="button" aria-haspopup="true" aria-expanded="false">Menu</button>
+      <a
+        id="serviceDownloadBtn"
+        class="service-download-btn"
+        href="./downloads/TJH_Tool_v2.0.1.zip"
+        download="TJH_Tool_v2.0.1.zip"
+        title="下载整个网页到本地，可离线使用"
+        aria-label="下载整个网页到本地，可离线使用"
+      >Download</a>
       <div id="serviceMenuPopup" class="service-menu-popup" hidden></div>
       <span class="service-mode-text">SERVICE MODE: Not for Treatment Use</span>
       <span class="service-spacer"></span>
       <span>View: [service]</span>
       <span>S250i State:</span>
-      <strong>WEBTOOL</strong>
-      <span>Planned Shutdown:</span>
-      <strong>INACTIVE</strong>
-      <span class="service-state-chip">MCC</span>
+      <strong>0013</strong>
+      <span class="service-state-chip">Tongji</span>
+      <span id="serviceClock" class="service-clock"></span>
     </div>
   </div>
 

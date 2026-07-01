@@ -89,6 +89,9 @@
 .feature-section-new .feature-link-title::before {
   content: "⭐ ";
   font-size: .9em;
+  color: #f3c316;
+  margin-right: 3px;
+  text-shadow: 0 1px 0 #8f6f00;
 }
 
 .feature-link-text {

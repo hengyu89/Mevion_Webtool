@@ -8,11 +8,7 @@ function setPage(pageId) {
   state.currentPageId = pageId;
 
   const parentId = findParentIdByChildId(pageId);
-  if (parentId) {
-    state.openParentId = parentId;
-  } else {
-    state.openParentId = null;
-  }
+  state.openParentId = parentId || null;
 
   renderMenu(state.currentPageId, state.openParentId);
   renderMainContent(state.currentPageId);
@@ -73,14 +69,9 @@ function bindMenuEvents() {
         initPageModule(state.currentPageId);
         return;
       }
-
-      setPage(pageId);
-      return;
     }
 
-    if (type === "child" || type === "page") {
-      setPage(pageId);
-    }
+    setPage(pageId);
   });
 }
 
@@ -149,17 +140,8 @@ function bindServiceMenu() {
   popup.addEventListener("click", (event) => {
     const menuBtn = event.target.closest("button[data-service-menu-id]");
     if (!menuBtn) return;
-
-    const type = menuBtn.dataset.serviceMenuType;
-    const pageId = menuBtn.dataset.serviceMenuId;
-
-    if (type === "parent") {
-      setPage(pageId);
-      return;
-    }
-
-    setPage(pageId);
-    closeServiceMenu();
+    setPage(menuBtn.dataset.serviceMenuId);
+    if (menuBtn.dataset.serviceMenuType !== "parent") closeServiceMenu();
   });
 
   document.addEventListener("click", (event) => {
@@ -179,10 +161,42 @@ function initBackgroundFallback() {
 
   const testImage = new Image();
   testImage.src = "./assets/images/bg.jpg";
-
   testImage.onerror = function () {
     bg.classList.add("no-image");
   };
+}
+
+function initServiceClock() {
+  const clock = document.getElementById("serviceClock");
+  if (!clock) return;
+
+  const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const months = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December"
+  ];
+
+  function pad(value) {
+    return String(value).padStart(2, "0");
+  }
+
+  function render() {
+    const now = new Date();
+    clock.textContent = `${weekdays[now.getDay()]} ${months[now.getMonth()]} ${now.getDate()} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())} ${now.getFullYear()}`;
+  }
+
+  render();
+  window.setInterval(render, 1000);
 }
 
 function initPageModule(pageId) {
@@ -217,53 +231,17 @@ document.addEventListener("DOMContentLoaded", () => {
   bindMenuEvents();
   bindSidebarToggle();
   bindServiceMenu();
+  initServiceClock();
   applySidebarState();
   setPage(state.currentPageId);
-  console.log("App initialized");
-});
-
-document.addEventListener("DOMContentLoaded", () => {
-  const toggleBtn = document.querySelector(".menu-toggle-btn");
-  if (!toggleBtn) return;
-
-  const homeBtn = document.createElement("button");
-  homeBtn.className = "menu-toggle-btn home-nav-btn";
-  homeBtn.innerHTML = "⌂";
-  homeBtn.title = "Home";
-  homeBtn.style.marginTop = "4px";
-
-  const downloadBtn = document.createElement("a");
-  downloadBtn.className = "menu-toggle-btn download-nav-btn";
-  downloadBtn.href = "./downloads/TJH_Tool_v1.0.zip";
-  downloadBtn.download = "TJH_Tool_v1.0.zip";
-  downloadBtn.title = "下载当前 Webtool zip";
-  downloadBtn.setAttribute("aria-label", "下载当前 Webtool zip");
-  downloadBtn.innerHTML = `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M12 3v11"></path>
-      <path d="M7.5 9.5 12 14l4.5-4.5"></path>
-      <path d="M5 18h14"></path>
-    </svg>
-  `;
-
-  toggleBtn.insertAdjacentElement("afterend", homeBtn);
-  homeBtn.insertAdjacentElement("afterend", downloadBtn);
-
-  homeBtn.addEventListener("click", () => {
-    if (typeof setPage === "function") {
-      setPage("home");
-    } else {
-      location.hash = "#home";
-    }
-  });
 });
 
 window.addEventListener("mouseup", () => {
-  document.querySelectorAll(
-    ".selection-box,.drag-selection-box,.selection-rect"
-  ).forEach(el => {
+  document.querySelectorAll(".selection-box,.drag-selection-box,.selection-rect").forEach((el) => {
     try {
       el.remove();
-    } catch(e){}
+    } catch (e) {
+      // Ignore cleanup race conditions from selection helpers.
+    }
   });
 });

@@ -13,11 +13,7 @@ function buildMainContentHtml(pageId) {
   }
 
   let html = "";
-
-  const heroStyle = page.hero.image
-    ? `style="--hero-image: url('${page.hero.image}')"`
-    : "";
-
+  const heroStyle = page.hero.image ? `style="--hero-image: url('${page.hero.image}')"` : "";
   const toolSwitcherHtml = buildToolStatusSwitcherHtml(pageId);
 
   html += `
@@ -48,16 +44,12 @@ function buildMainContentHtml(pageId) {
         <section class="card section-card">
           <h2 class="section-title">${section.title}</h2>
           <div class="info-grid">
-            ${(section.items || [])
-              .map(
-                (item) => `
-                  <div class="info-tile">
-                    <div class="info-tile-label">${item.label}</div>
-                    <div class="info-tile-value">${item.value}</div>
-                  </div>
-                `
-              )
-              .join("")}
+            ${(section.items || []).map((item) => `
+              <div class="info-tile">
+                <div class="info-tile-label">${item.label}</div>
+                <div class="info-tile-value">${item.value}</div>
+              </div>
+            `).join("")}
           </div>
         </section>
       `;
@@ -68,19 +60,15 @@ function buildMainContentHtml(pageId) {
         <section class="card section-card feature-section-card ${section.title === "新功能" ? "feature-section-new" : ""}">
           <h2 class="section-title">${section.title}</h2>
           <div class="feature-link-grid">
-            ${(section.items || [])
-              .map(
-                (item) => `
-                  <button class="feature-link-card" type="button" data-page-id="${item.pageId}">
-                    <span class="feature-link-text">
-                      <span class="feature-link-title">${item.label}</span>
-                      <span class="feature-link-desc">${item.desc || ""}</span>
-                    </span>
-                    <span class="feature-link-icon" aria-hidden="true">${item.icon || "›"}</span>
-                  </button>
-                `
-              )
-              .join("")}
+            ${(section.items || []).map((item) => `
+              <button class="feature-link-card" type="button" data-page-id="${item.pageId}">
+                <span class="feature-link-text">
+                  <span class="feature-link-title">${item.label}</span>
+                  <span class="feature-link-desc">${item.desc || ""}</span>
+                </span>
+                <span class="feature-link-icon" aria-hidden="true">${item.icon || "›"}</span>
+              </button>
+            `).join("")}
           </div>
         </section>
       `;
@@ -158,7 +146,6 @@ function renderSideContent(pageId) {
   if (!sideContent) return;
 
   const page = pageContent[pageId];
-
   if (!page || !page.side) {
     sideContent.innerHTML = `
       <section class="card side-card">
@@ -169,26 +156,16 @@ function renderSideContent(pageId) {
     return;
   }
 
-  let html = "";
-
-  page.side.forEach((block) => {
-    html += `
-      <section class="card side-card">
-        <h3 class="side-card-title">${block.title}</h3>
-        <div class="side-list">
-          ${(block.items || [])
-            .map(
-              (item) => `
-                <div class="side-list-item">
-                  <span class="notice-badge">INFO</span>${item}
-                </div>
-              `
-            )
-            .join("")}
-        </div>
-      </section>
-    `;
-  });
-
-  sideContent.innerHTML = html;
+  sideContent.innerHTML = (page.side || []).map((block) => `
+    <section class="card side-card">
+      <h3 class="side-card-title">${block.title}</h3>
+      <div class="side-list">
+        ${(block.items || []).map((item) => `
+          <div class="side-list-item">
+            <span class="notice-badge">INFO</span>${item}
+          </div>
+        `).join("")}
+      </div>
+    </section>
+  `).join("");
 }
