@@ -442,13 +442,13 @@ const pageContent = {
     hero: {
       tag: "",
       title: "TIC Sweep",
-      desc: "TIC Sweep 相关每日数据分析工具预留页。"
+      desc: "分析 TIC Sweep Treatment Record，查看单脉冲 TIC、累计 TIC 和位置相关指标。"
     },
     sections: [
       {
         title: "工具区",
-        type: "text",
-        content: "该工具页面暂未接入具体分析逻辑。"
+        type: "custom",
+        customId: "ticSweepToolRoot"
       }
     ],
     side: []

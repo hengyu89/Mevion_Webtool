@@ -244,7 +244,7 @@ function bindTcShiftToolEvents() {
       file.name.toLowerCase().endsWith(".csv")
     );
     if (window.TcLogFileStore) {
-      window.TcLogFileStore.setFiles(selectedFiles);
+      window.TcLogFileStore.setFiles(selectedFiles, "tool-tc-shift");
       loadedFileKey = window.TcLogFileStore.getFileKey();
     }
     analyzeSelectedFiles();

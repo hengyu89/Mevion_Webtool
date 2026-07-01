@@ -20,11 +20,22 @@
   }
 
   window.TcLogFileStore = {
-    setFiles(fileListLike) {
+    setFiles(fileListLike, sourceToolId) {
       const next = normalize(fileListLike);
       const nextKey = makeKey(next);
+      const changed = nextKey !== fileKey;
       files = next;
       fileKey = nextKey;
+
+      if (
+        changed &&
+        sourceToolId &&
+        window.ToolStatusRegistry &&
+        typeof window.ToolStatusRegistry.markStaleExcept === "function"
+      ) {
+        window.ToolStatusRegistry.markStaleExcept(sourceToolId);
+      }
+
       return files.slice();
     },
 

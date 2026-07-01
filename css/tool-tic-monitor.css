@@ -104,22 +104,21 @@
 
 .tic-chart-wrap {
   position: relative;
-  width: 900px;
-  max-width: 900px;
-  min-width: 900px;
-  height: 420px;
-  max-height: 420px;
+  width: 1200px;
+  max-width: 1200px;
+  min-width: 1200px;
+  height: 560px;
+  max-height: 560px;
   margin: 6px 0 0 0;
   overflow: visible;
-  background: #efefef;
 }
 
 .tic-chart-wrap canvas {
   display: block;
-  width: 900px;
-  height: 420px;
-  max-width: 900px;
-  max-height: 420px;
+  width: 1200px;
+  height: 560px;
+  max-width: 1200px;
+  max-height: 560px;
   cursor: crosshair;
 }
 

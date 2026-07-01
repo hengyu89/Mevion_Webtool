@@ -14,10 +14,12 @@ const ticMonitorChartRuntime = {
 
 const TIC_SERIES = ["US TIC", "DS TIC X", "DS TIC Y"];
 const TIC_COLORS = {
-  "US TIC": "#0070c0",
-  "DS TIC X": "#008f54",
-  "DS TIC Y": "#c46a00"
+  "US TIC": "#10b981",
+  "DS TIC X": "#3b82f6",
+  "DS TIC Y": "#f59e0b"
 };
+const TIC_CHART_SIZE = { width: 1200, height: 560 };
+const TIC_CHART_PADDING = { left: 78, right: 30, top: 30, bottom: 68 };
 
 function updateTicMonitorToolStatus(type, message) {
   if (!window.ToolStatusRegistry || typeof window.ToolStatusRegistry.setStatus !== "function") return;
@@ -113,7 +115,7 @@ function bindTicMonitorEvents() {
       file.name.toLowerCase().endsWith(".csv")
     );
     if (window.TcLogFileStore) {
-      window.TcLogFileStore.setFiles(selectedFiles);
+      window.TcLogFileStore.setFiles(selectedFiles, "tool-tic-monitor");
       loadedFileKey = window.TcLogFileStore.getFileKey();
     }
     analyzeSelectedFiles();
@@ -303,7 +305,7 @@ function renderTicChartPanel(kind, panelTitle, plotTitle, unit, yAxisTitle) {
         </div>
       </div>
       <div class="chart-canvas-wrap tic-chart-wrap">
-        <canvas id="tic-${kind}-canvas" data-kind="${kind}" data-unit="${unit}" data-y-axis-title="${yAxisTitle}" data-plot-title="${plotTitle}" width="600" height="280"></canvas>
+        <canvas id="tic-${kind}-canvas" data-kind="${kind}" data-unit="${unit}" data-y-axis-title="${yAxisTitle}" data-canvas-title="${panelTitle}" data-plot-title="${plotTitle}" width="1200" height="560"></canvas>
       </div>
     </section>
   `;
@@ -331,28 +333,21 @@ function drawAllTicCharts() {
 function drawTicScatterChart(canvas, kind, unit) {
   if (!canvas) return;
 
-  // Keep the Scanning Magnet Shift chart ratio, but render it as a true HiDPI canvas.
-  // Logical drawing size: 900 x 420. Internal bitmap: 2x by default for sharp display/export.
-  const width = 900;
-  const height = 420;
-  const dpr = Math.max(2, Math.ceil(window.devicePixelRatio || 1));
-  canvas.width = Math.round(width * dpr);
-  canvas.height = Math.round(height * dpr);
+  const { width, height } = TIC_CHART_SIZE;
+  canvas.width = width;
+  canvas.height = height;
   canvas.style.width = `${width}px`;
   canvas.style.height = `${height}px`;
 
   const ctx = canvas.getContext("2d");
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, width, height);
 
   const data = ticMonitorState.points.filter((p) => p.kind === kind && ticMonitorState.visible[p.series]);
   const allKindData = ticMonitorState.points.filter((p) => p.kind === kind);
-  const padding = { left: 98, right: 36, top: 58, bottom: 96 };
+  const padding = TIC_CHART_PADDING;
   const plotW = width - padding.left - padding.right;
   const plotH = height - padding.top - padding.bottom;
-
-  ctx.fillStyle = "#efefef";
-  ctx.fillRect(0, 0, width, height);
 
   if (!allKindData.length) {
     ctx.fillStyle = "#777";
@@ -378,8 +373,8 @@ function drawTicScatterChart(canvas, kind, unit) {
   const yToPx = (value) => padding.top + (1 - (value - yMin) / (yMax - yMin)) * plotH;
 
   const yAxisTitle = canvas.dataset.yAxisTitle || (kind === "pressure" ? "TIC Pressure (hPa)" : "TIC Temp (°C)");
-  const plotTitle = canvas.dataset.plotTitle || (kind === "pressure" ? "TIC Pressure vs. Time" : "TIC Temp vs. Time");
-  drawTicGrid(ctx, padding, plotW, plotH, xMin, xMax, yMin, yMax, unit, xToPx, yToPx, yAxisTitle, yTicks, plotTitle);
+  const canvasTitle = canvas.dataset.canvasTitle || (kind === "pressure" ? "TIC Pressure" : "TIC Temperature");
+  drawTicGrid(ctx, padding, plotW, plotH, xMin, xMax, yMin, yMax, xToPx, yToPx, yAxisTitle, yTicks, canvasTitle);
 
   const drawnPoints = [];
 
@@ -391,7 +386,7 @@ function drawTicScatterChart(canvas, kind, unit) {
       const y = yToPx(p.value);
       if (x < padding.left - 4 || x > padding.left + plotW + 4 || y < padding.top - 4 || y > padding.top + plotH + 4) return;
       ctx.beginPath();
-      ctx.arc(x, y, 4.2, 0, Math.PI * 2);
+      ctx.arc(x, y, 5, 0, Math.PI * 2);
       ctx.fill();
       drawnPoints.push({ x, y, point: p });
     });
@@ -415,7 +410,7 @@ function drawTicScatterChart(canvas, kind, unit) {
   }
 }
 
-function drawTicGrid(ctx, padding, plotW, plotH, xMin, xMax, yMin, yMax, unit, xToPx, yToPx, yAxisTitle, yTicks = [], plotTitle = "") {
+function drawTicGrid(ctx, padding, plotW, plotH, xMin, xMax, yMin, yMax, xToPx, yToPx, yAxisTitle, yTicks = [], canvasTitle = "") {
   ctx.save();
 
   ctx.strokeStyle = "rgba(0,0,0,0.10)";
@@ -434,7 +429,7 @@ function drawTicGrid(ctx, padding, plotW, plotH, xMin, xMax, yMin, yMax, unit, x
 
     ctx.setLineDash([]);
     ctx.fillStyle = "#888";
-    ctx.font = "13px Segoe UI";
+    ctx.font = "12px Segoe UI";
     drawTicWrappedXAxisLabel(ctx, formatTicAxisTime(timeMs, xMin, xMax), x, padding.top + plotH + 22);
     ctx.setLineDash([4, 4]);
   });
@@ -451,19 +446,19 @@ function drawTicGrid(ctx, padding, plotW, plotH, xMin, xMax, yMin, yMax, unit, x
 
     ctx.setLineDash([]);
     ctx.fillStyle = "#888";
-    ctx.font = "13px Segoe UI";
-    ctx.fillText(`${formatTicAxisValue(value)} ${unit}`, padding.left - 10, y + 2);
+    ctx.font = "12px Segoe UI";
+    ctx.fillText(formatTicAxisValue(value), padding.left - 10, y + 4);
     ctx.setLineDash([4, 4]);
   });
 
   ctx.setLineDash([]);
 
-  if (plotTitle) {
-    ctx.fillStyle = "#111";
-    ctx.font = "700 14px Segoe UI";
+  if (canvasTitle) {
+    ctx.fillStyle = "#888";
+    ctx.font = "700 16px Segoe UI";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(plotTitle, padding.left + plotW / 2, 20);
+    ctx.fillText(canvasTitle, padding.left + plotW / 2, 14);
   }
 
   ctx.strokeStyle = "rgba(0,0,0,0.22)";
@@ -475,17 +470,17 @@ function drawTicGrid(ctx, padding, plotW, plotH, xMin, xMax, yMin, yMax, unit, x
   ctx.stroke();
 
   ctx.fillStyle = "#555";
-  ctx.font = "14px Segoe UI";
+  ctx.font = "13px Segoe UI";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
 
   ctx.save();
-  ctx.translate(28, padding.top + plotH / 2);
+  ctx.translate(20, padding.top + plotH / 2 + 20);
   ctx.rotate(-Math.PI / 2);
   ctx.fillText(yAxisTitle || "", 0, 0);
   ctx.restore();
 
-  ctx.fillText("Time", padding.left + plotW / 2, padding.top + plotH + 60);
+  ctx.fillText("Time", padding.left + plotW / 2, TIC_CHART_SIZE.height - 18);
 
   ctx.restore();
 }
@@ -614,11 +609,11 @@ function bindTicChartHover(canvas) {
 
     const oldPoint = ticMonitorChartRuntime.hoverPoints.get(canvas.id);
     const oldKey = oldPoint ? `${oldPoint.point.series}-${oldPoint.point.timeMs}-${oldPoint.point.value}` : "";
-    const newKey = nearest && nearestDist <= 14 ? `${nearest.point.series}-${nearest.point.timeMs}-${nearest.point.value}` : "";
+    const newKey = nearest && nearestDist <= 18 ? `${nearest.point.series}-${nearest.point.timeMs}-${nearest.point.value}` : "";
 
     if (oldKey === newKey) return;
 
-    if (!nearest || nearestDist > 14) {
+    if (!nearest || nearestDist > 18) {
       ticMonitorChartRuntime.hoverPoints.delete(canvas.id);
     } else {
       ticMonitorChartRuntime.hoverPoints.set(canvas.id, nearest);
@@ -656,7 +651,7 @@ function drawTicCanvasTooltip(ctx, point, unit, pointX, pointY, canvasWidth, can
   ];
 
   ctx.save();
-  ctx.font = "13px Segoe UI";
+  ctx.font = "12px Segoe UI";
 
   let maxWidth = 0;
   for (const line of lines) {
@@ -664,7 +659,7 @@ function drawTicCanvasTooltip(ctx, point, unit, pointX, pointY, canvasWidth, can
     if (width > maxWidth) maxWidth = width;
   }
 
-  const boxWidth = Math.min(maxWidth + 20, 220);
+  const boxWidth = Math.min(maxWidth + 20, 240);
   const boxHeight = lines.length * 18 + 16;
 
   let boxX = pointX + 12;

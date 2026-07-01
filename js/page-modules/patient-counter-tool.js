@@ -84,7 +84,7 @@ function bindPatientCounterEvents() {
       const newCount = rows.filter((row) => row.isNew).length;
       const elapsedMs = performance.now() - startTime;
       setStatus(
-        `共 ${selectedFiles.length} 份文件，耗时 ${formatPatientElapsed(elapsedMs)}，分析完成！共 ${rows.length} 个病人，其中 ${newCount} 个新病人。`,
+        `共 ${selectedFiles.length} 份文件，耗时 ${formatPatientElapsed(elapsedMs)}，分析完成！共 ${rows.length} 个病人，其中 ${newCount} 个 Frac 1。`,
         "done"
       );
     } catch (error) {
@@ -99,7 +99,7 @@ function bindPatientCounterEvents() {
       file.name.toLowerCase().endsWith(".csv")
     );
     if (window.TcLogFileStore) {
-      window.TcLogFileStore.setFiles(selectedFiles);
+      window.TcLogFileStore.setFiles(selectedFiles, "tool-patient-counter");
       loadedFileKey = window.TcLogFileStore.getFileKey();
     }
     analyzeSelectedFiles();
@@ -143,17 +143,18 @@ function bindPatientCounterEvents() {
 }
 
 async function parsePatientCounterFiles(files, onProgress) {
+  const orderedFiles = sortPatientCounterFiles(files);
   const patientMap = new Map();
   const context = {
     currentPatientId: "",
-    latestFractionByPatient: new Map(),
-    patientStartById: new Map()
+    patientStartById: new Map(),
+    currentPlanStartById: new Map()
   };
 
-  const total = files.length;
+  const total = orderedFiles.length;
 
-  for (let fileIndex = 0; fileIndex < files.length; fileIndex += 1) {
-    const file = files[fileIndex];
+  for (let fileIndex = 0; fileIndex < orderedFiles.length; fileIndex += 1) {
+    const file = orderedFiles[fileIndex];
 
     if (typeof onProgress === "function") {
       onProgress(fileIndex + 1, total, file.name);
@@ -164,16 +165,63 @@ async function parsePatientCounterFiles(files, onProgress) {
   }
 
   return Array.from(patientMap.values())
-    .map((item) => ({
-      ...item,
-      fraction: item.fraction === null || item.fraction === undefined ? "" : item.fraction,
-      isNew: Number(item.fraction) === 1
-    }))
+    .map((item) => {
+      const fractions = Array.from(item.fractions || [])
+        .map(Number)
+        .filter(Number.isFinite)
+        .sort((a, b) => a - b);
+      const beams = Array.from(item.beams || [])
+        .map(Number)
+        .filter(Number.isFinite)
+        .sort((a, b) => a - b)
+        .map(String);
+      return {
+        ...item,
+        beams,
+        fractions,
+        fraction: fractions.length ? Math.max(...fractions) : "",
+        fractionDisplay: formatPatientFractionRange(fractions),
+        treatmentDurationMs: getPatientTotalTreatmentDurationMs(item),
+        ...getPatientTreatmentWindow(item),
+        isNew: fractions.includes(1)
+      };
+    })
     .sort((a, b) => {
       const timeA = Number.isFinite(a.startTimeMs) ? a.startTimeMs : 0;
       const timeB = Number.isFinite(b.startTimeMs) ? b.startTimeMs : 0;
       return timeA - timeB;
     });
+}
+
+function sortPatientCounterFiles(files) {
+  return Array.from(files || [])
+    .map((file, index) => ({
+      file,
+      index,
+      sortTime: getPatientFileSortTime(file)
+    }))
+    .sort((a, b) => {
+      if (Number.isFinite(a.sortTime) && Number.isFinite(b.sortTime) && a.sortTime !== b.sortTime) {
+        return a.sortTime - b.sortTime;
+      }
+      if (Number.isFinite(a.sortTime) !== Number.isFinite(b.sortTime)) {
+        return Number.isFinite(a.sortTime) ? -1 : 1;
+      }
+      return a.index - b.index;
+    })
+    .map((item) => item.file);
+}
+
+function getPatientFileSortTime(file) {
+  const name = String((file && file.name) || "");
+  const match = name.match(/TCLogger\.(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})/i);
+  if (match) {
+    const [, y, m, d, hh, mm, ss] = match;
+    return new Date(Number(y), Number(m) - 1, Number(d), Number(hh), Number(mm), Number(ss)).getTime();
+  }
+
+  const lastModified = file && Number(file.lastModified);
+  return Number.isFinite(lastModified) ? lastModified : NaN;
 }
 
 async function parsePatientCounterFileStream(file, patientMap, context, sourceFileName) {
@@ -238,8 +286,10 @@ function parsePatientCounterRelevantLine(line, headerIndexes, patientMap, contex
   }
 
   if (
-    line.indexOf("Patient ID:") === -1 &&
+    line.indexOf("/Debug/") === -1 &&
     line.indexOf("Saving dosimetry record at") === -1 &&
+    line.indexOf("Treatment Record ") === -1 &&
+    line.toLowerCase().indexOf("beam number") === -1 &&
     line.toLowerCase().indexOf("fraction number:") === -1
   ) {
     return headerIndexes;
@@ -250,9 +300,9 @@ function parsePatientCounterRelevantLine(line, headerIndexes, patientMap, contex
   const message = cols[headerIndexes.message] || "";
   const tcTimeMs = parsePatientTimestamp(tcTimestamp);
 
-  const patientMatch = message.match(/Patient ID:\s*([A-Za-z0-9_-]+)/i);
-  if (patientMatch) {
-    const patientId = patientMatch[1];
+  const planOpenMatch = message.match(/Saving DICOM file\s*\([^)]*\/exams\/([A-Za-z0-9_-]+)\/Debug\/BDI[^)]*/i);
+  if (planOpenMatch) {
+    const patientId = planOpenMatch[1];
     if (!isValidRealPatientId(patientId)) return headerIndexes;
     context.currentPatientId = patientId;
 
@@ -264,25 +314,43 @@ function parsePatientCounterRelevantLine(line, headerIndexes, patientMap, contex
         sourceFileName
       });
     }
+
+    if (Number.isFinite(tcTimeMs)) {
+      context.currentPlanStartById.set(patientId, {
+        timeMs: tcTimeMs,
+        timestamp: tcTimestamp,
+        sourceFileName
+      });
+    }
+
+    updatePatientRecord(patientMap, patientId, {
+      startTimeMs: tcTimeMs,
+      startTimestamp: tcTimestamp,
+      sourceFileName,
+      source: "Plan Open"
+    });
   }
 
-  const dosrecMatch = message.match(/Saving dosimetry record at\s+([^"\s]*\/exams\/([A-Za-z0-9_-]+)\/[^"\s]*?Frac(\d+)\.csv)/i);
+  const dosrecMatch = message.match(/Saving dosimetry record at\s+([^"]*?Frac(\d+)\.csv)/i);
   if (dosrecMatch) {
     const dosrecPath = dosrecMatch[1] || "";
-    const patientId = dosrecMatch[2];
+    const pathPatientMatch = dosrecPath.match(/\/exams\/(\d{6,})\//i);
+    const patientId = context.currentPatientId || (pathPatientMatch ? pathPatientMatch[1] : "");
     if (!isValidRealPatientId(patientId)) return headerIndexes;
     const beamMatch = dosrecPath.match(/Beam[_-]?(\d+)/i);
     const rawBeam = beamMatch ? Number(beamMatch[1]) : NaN;
     const beam = Number.isFinite(rawBeam) ? Math.max(1, rawBeam - 1) : "";
-    const fraction = Number(dosrecMatch[3]);
+    const fraction = Number(dosrecMatch[2]);
     const startInfo = context.patientStartById.get(patientId);
+    const sessionStartInfo = context.currentPlanStartById.get(patientId) || startInfo;
 
     context.currentPatientId = patientId;
-    context.latestFractionByPatient.set(patientId, fraction);
     updatePatientRecord(patientMap, patientId, {
       fraction,
       beam,
       startTimeMs: startInfo && Number.isFinite(startInfo.timeMs) ? startInfo.timeMs : tcTimeMs,
+      sessionStartTimeMs: sessionStartInfo && Number.isFinite(sessionStartInfo.timeMs) ? sessionStartInfo.timeMs : tcTimeMs,
+      sessionStartTimestamp: sessionStartInfo ? sessionStartInfo.timestamp : tcTimestamp,
       endTimeMs: tcTimeMs,
       startTimestamp: startInfo ? startInfo.timestamp : tcTimestamp,
       endTimestamp: tcTimestamp,
@@ -292,17 +360,62 @@ function parsePatientCounterRelevantLine(line, headerIndexes, patientMap, contex
     return headerIndexes;
   }
 
+  const treatmentRecordMatch = message.match(/Treatment Record\s+.+?\s+for Patient\s+([A-Za-z0-9_-]+)\..*?\bFraction\s+(\d+)\./i);
+  if (treatmentRecordMatch) {
+    const patientId = treatmentRecordMatch[1];
+    if (!isValidRealPatientId(patientId)) return headerIndexes;
+    const fraction = Number(treatmentRecordMatch[2]);
+    const startInfo = context.patientStartById.get(patientId);
+    const sessionStartInfo = context.currentPlanStartById.get(patientId) || startInfo;
+
+    context.currentPatientId = patientId;
+    updatePatientRecord(patientMap, patientId, {
+      fraction,
+      startTimeMs: startInfo && Number.isFinite(startInfo.timeMs) ? startInfo.timeMs : tcTimeMs,
+      sessionStartTimeMs: sessionStartInfo && Number.isFinite(sessionStartInfo.timeMs) ? sessionStartInfo.timeMs : tcTimeMs,
+      sessionStartTimestamp: sessionStartInfo ? sessionStartInfo.timestamp : tcTimestamp,
+      endTimeMs: tcTimeMs,
+      startTimestamp: startInfo ? startInfo.timestamp : tcTimestamp,
+      endTimestamp: tcTimestamp,
+      sourceFileName,
+      source: "Treatment Record"
+    });
+    return headerIndexes;
+  }
+
+  const beamFractionMatch = message.match(/\bBeam Number:\s*(\d+),\s*Fraction Number:\s*(\d+)/i);
+  if (beamFractionMatch && context.currentPatientId) {
+    const existingRecord = patientMap.get(context.currentPatientId);
+    if (existingRecord) {
+      updatePatientRecord(patientMap, context.currentPatientId, {
+        beam: Number(beamFractionMatch[1]),
+        fraction: Number(beamFractionMatch[2]),
+        sourceFileName
+      });
+    }
+    return headerIndexes;
+  }
+
+  const beamMatch = message.match(/^Beam number:\s*(\d+)/i);
+  if (beamMatch && context.currentPatientId) {
+    const existingRecord = patientMap.get(context.currentPatientId);
+    if (existingRecord) {
+      updatePatientRecord(patientMap, context.currentPatientId, {
+        beam: Number(beamMatch[1]),
+        sourceFileName
+      });
+    }
+    return headerIndexes;
+  }
+
   const fractionMatch = message.match(/Fraction Number:\s*(\d+)/i);
   if (fractionMatch && context.currentPatientId) {
     const fraction = Number(fractionMatch[1]);
-    context.latestFractionByPatient.set(context.currentPatientId, fraction);
 
     const existingRecord = patientMap.get(context.currentPatientId);
-    if (existingRecord && !Number.isFinite(Number(existingRecord.fraction))) {
+    if (existingRecord) {
       updatePatientRecord(patientMap, context.currentPatientId, {
         fraction,
-        endTimeMs: tcTimeMs,
-        endTimestamp: tcTimestamp,
         sourceFileName,
         source: "Fraction Number"
       });
@@ -319,7 +432,9 @@ function ensurePatientRecord(patientMap, patientId, data) {
     patientMap.set(patientId, {
       patientId,
       fraction: null,
+      fractions: new Set(),
       beams: new Set(),
+      sessionsByFraction: new Map(),
       startTimeMs: Number.isFinite(data.startTimeMs) ? data.startTimeMs : null,
       endTimeMs: Number.isFinite(data.endTimeMs) ? data.endTimeMs : null,
       startTimestamp: data.startTimestamp || "",
@@ -337,8 +452,33 @@ function updatePatientRecord(patientMap, patientId, data) {
   if (!record) return;
 
   if (Number.isFinite(data.fraction)) {
-    if (!Number.isFinite(Number(record.fraction)) || data.fraction > Number(record.fraction)) {
-      record.fraction = data.fraction;
+    record.fractions.add(Number(data.fraction));
+    record.fraction = Math.max(...Array.from(record.fractions).map(Number));
+  }
+
+  if (
+    Number.isFinite(data.fraction) &&
+    Number.isFinite(data.sessionStartTimeMs) &&
+    Number.isFinite(data.endTimeMs)
+  ) {
+    const sessionKey = String(Number(data.fraction));
+    const currentSession = record.sessionsByFraction.get(sessionKey);
+    if (!currentSession) {
+      record.sessionsByFraction.set(sessionKey, {
+        startTimeMs: data.sessionStartTimeMs,
+        endTimeMs: data.endTimeMs,
+        startTimestamp: data.sessionStartTimestamp || data.startTimestamp || "",
+        endTimestamp: data.endTimestamp || ""
+      });
+    } else {
+      if (data.sessionStartTimeMs < currentSession.startTimeMs) {
+        currentSession.startTimeMs = data.sessionStartTimeMs;
+        currentSession.startTimestamp = data.sessionStartTimestamp || data.startTimestamp || currentSession.startTimestamp;
+      }
+      if (data.endTimeMs >= currentSession.endTimeMs) {
+        currentSession.endTimeMs = data.endTimeMs;
+        currentSession.endTimestamp = data.endTimestamp || currentSession.endTimestamp;
+      }
     }
   }
 
@@ -386,7 +526,7 @@ function renderPatientCounterTableAndSummary() {
   summary.innerHTML = `
     <div class="summary-row patient-summary-row">
       <div class="summary-card patient-count-card"><strong>治疗人数：</strong>${rows.length}</div>
-      <div class="summary-card patient-new-card"><strong>新病人：</strong>${newCount}</div>
+      <div class="summary-card patient-new-card"><strong>Frac 1 数：</strong>${newCount}</div>
       <div class="table-pagination compact-pagination patient-pagination">
         <div class="pagination-info compact-pagination-info">
           第
@@ -404,6 +544,7 @@ function renderPatientCounterTableAndSummary() {
         <button id="patientNextPageBtn" class="tool-btn pagination-btn" ${currentPage >= totalPages ? "disabled" : ""}>下一页</button>
       </div>
     </div>
+    <div class="patient-summary-note">Frac1 可能代表新病人，也可能代表改了计划</div>
   `;
 
   if (!rows.length) {
@@ -435,11 +576,11 @@ function renderPatientCounterTableAndSummary() {
               <tr class="${row.isNew ? "patient-new-row" : ""}">
                 <td class="muted-cell">${start + index + 1}</td>
                 <td class="patient-id-cell">${escapePatientHtml(row.patientId)}</td>
-                <td class="patient-fraction-cell">${row.fraction ? `Frac <strong>${row.fraction}</strong>` : "-"}</td>
+                <td class="patient-fraction-cell">${row.fractionDisplay ? escapePatientHtml(row.fractionDisplay) : "-"}</td>
                 <td>${row.isNew ? `<span class="patient-new-badge">NEW</span>` : `<span class="patient-normal-badge">-</span>`}</td>
                 <td>${escapePatientHtml(formatPatientTimeOnly(row.startTimestamp))}</td>
                 <td>${escapePatientHtml(formatPatientTimeOnly(row.endTimestamp))}</td>
-                <td>${escapePatientHtml(formatPatientDuration(row.startTimeMs, row.endTimeMs))}</td>
+                <td>${escapePatientHtml(formatPatientDuration(row.treatmentDurationMs))}</td>
                 <td>${escapePatientHtml(beams || "-")}</td>
                 <td>${escapePatientHtml(row.source || "-")}</td>
               </tr>
@@ -536,19 +677,100 @@ function parsePatientTimestamp(value) {
 
 function formatPatientTimeOnly(timestamp) {
   const text = String(timestamp || "").trim();
-  const match = text.match(/\d{4}-\d{2}-\d{2}\s+(\d{2}:\d{2}:\d{2})/);
+  const match = text.match(/\d{4}-\d{2}-\d{2}\s+(\d{2}:\d{2})/);
   return match ? match[1] : "-";
 }
 
-function formatPatientDuration(startMs, endMs) {
-  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs < startMs) {
+function getPatientTotalTreatmentDurationMs(record) {
+  if (!record || !record.sessionsByFraction || typeof record.sessionsByFraction.values !== "function") {
+    return NaN;
+  }
+
+  let total = 0;
+  let hasSession = false;
+
+  for (const session of record.sessionsByFraction.values()) {
+    if (
+      Number.isFinite(session.startTimeMs) &&
+      Number.isFinite(session.endTimeMs) &&
+      session.endTimeMs >= session.startTimeMs
+    ) {
+      total += session.endTimeMs - session.startTimeMs;
+      hasSession = true;
+    }
+  }
+
+  return hasSession ? total : NaN;
+}
+
+function getPatientTreatmentWindow(record) {
+  if (!record || !record.sessionsByFraction || typeof record.sessionsByFraction.values !== "function") {
+    return {};
+  }
+
+  let startTimeMs = NaN;
+  let endTimeMs = NaN;
+  let startTimestamp = "";
+  let endTimestamp = "";
+
+  for (const session of record.sessionsByFraction.values()) {
+    if (!Number.isFinite(session.startTimeMs) || !Number.isFinite(session.endTimeMs)) {
+      continue;
+    }
+
+    if (!Number.isFinite(startTimeMs) || session.startTimeMs < startTimeMs) {
+      startTimeMs = session.startTimeMs;
+      startTimestamp = session.startTimestamp || "";
+    }
+
+    if (!Number.isFinite(endTimeMs) || session.endTimeMs >= endTimeMs) {
+      endTimeMs = session.endTimeMs;
+      endTimestamp = session.endTimestamp || "";
+    }
+  }
+
+  if (!Number.isFinite(startTimeMs) || !Number.isFinite(endTimeMs)) {
+    return {};
+  }
+
+  return {
+    startTimeMs,
+    endTimeMs,
+    startTimestamp,
+    endTimestamp
+  };
+}
+
+function formatPatientDuration(durationMs) {
+  if (!Number.isFinite(durationMs)) {
     return "-";
   }
 
-  const totalSeconds = Math.max(0, Math.round((endMs - startMs) / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes} min ${String(seconds).padStart(2, "0")} s`;
+  const totalMinutes = Math.max(0, durationMs / 60000);
+  return `${totalMinutes.toFixed(1)} min`;
+}
+
+function formatPatientFractionRange(fractions) {
+  if (!Array.isArray(fractions) || !fractions.length) return "";
+
+  const ranges = [];
+  let start = fractions[0];
+  let previous = fractions[0];
+
+  for (let i = 1; i < fractions.length; i += 1) {
+    const current = fractions[i];
+    if (current === previous + 1) {
+      previous = current;
+      continue;
+    }
+
+    ranges.push(start === previous ? String(start) : `${start}-${previous}`);
+    start = current;
+    previous = current;
+  }
+
+  ranges.push(start === previous ? String(start) : `${start}-${previous}`);
+  return `Frac ${ranges.join(", ")}`;
 }
 
 function formatPatientElapsed(elapsedMs) {

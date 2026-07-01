@@ -19,7 +19,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  margin: 6px 0 8px;
+  margin: 4px 0 3px;
 }
 
 .patient-count-card,
@@ -33,6 +33,22 @@
 
 .patient-pagination {
   margin-left: auto;
+}
+
+.patient-pagination .pagination-btn {
+  min-height: 24px;
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+
+.patient-summary-note {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  margin: 1px 0 6px 18px;
+  transform: translateY(4px);
+  color: #555;
+  font-size: 12px;
 }
 
 .patient-table-wrap {

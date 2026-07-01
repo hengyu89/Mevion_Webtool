@@ -11,6 +11,8 @@
   <link rel="stylesheet" href="./css/tool-tc-shift.css" />
   <link rel="stylesheet" href="./css/tool-patient-counter.css" />
   <link rel="stylesheet" href="./css/tool-tic-monitor.css" />
+  <link rel="stylesheet" href="./css/tool-tic-sweep.css" />
+  <link rel="stylesheet" href="./css/company-skin.css" />
 </head>
 <body>
   <div class="page-bg">
@@ -34,6 +36,18 @@
         <div id="mainContent" class="service-main-content"></div>
       </main>
     </div>
+    <div class="service-status-bar">
+      <button id="serviceMenuBtn" class="service-menu-btn" type="button" aria-haspopup="true" aria-expanded="false">Menu</button>
+      <div id="serviceMenuPopup" class="service-menu-popup" hidden></div>
+      <span class="service-mode-text">SERVICE MODE: Not for Treatment Use</span>
+      <span class="service-spacer"></span>
+      <span>View: [service]</span>
+      <span>S250i State:</span>
+      <strong>WEBTOOL</strong>
+      <span>Planned Shutdown:</span>
+      <strong>INACTIVE</strong>
+      <span class="service-state-chip">MCC</span>
+    </div>
   </div>
 
   <script src="./data/pages.js"></script>
@@ -44,6 +58,7 @@
   <script src="./js/page-modules/tc-shift-tool.js"></script>
   <script src="./js/page-modules/patient-counter-tool.js"></script>
   <script src="./js/page-modules/tic-monitor-tool.js"></script>
+  <script src="./js/page-modules/tic-sweep-tool.js"></script>
   <script src="./js/app.js"></script>
 </body>
 </html>

@@ -26,6 +26,13 @@
     renderAll();
   }
 
+  function markStaleExcept(activeToolId) {
+    tools.forEach((tool) => {
+      if (tool.id === activeToolId) return;
+      setStatus(tool.id, "error", "Log updated; reload needed");
+    });
+  }
+
   function getDefaultMessage(status) {
     if (status === "running") return "分析中";
     if (status === "done") return "已加载";
@@ -70,6 +77,7 @@
     getTools,
     getStatus,
     setStatus,
+    markStaleExcept,
     renderSwitcherHtml,
     updateActive,
     renderAll

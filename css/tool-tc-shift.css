@@ -618,91 +618,6 @@ input[type="checkbox"] {
   pointer-events: auto !important;
 }
 
-.side-stats-grid {
-  grid-template-columns: repeat(2, max-content) !important;
-  justify-content: start !important;
-  align-items: start !important;
-}
-
-.mini-stat-card {
-  width: fit-content !important;
-  min-width: 118px !important;
-  max-width: 145px !important;
-  padding: 7px 8px !important;
-}
-
-.calc-form-grid {
-  grid-template-columns: repeat(2, max-content) !important;
-  justify-content: start !important;
-  column-gap: 14px !important;
-  row-gap: 8px !important;
-}
-
-.calc-field {
-  width: 118px !important;
-}
-
-.calc-input,
-.offset-param-input {
-  width: 112px !important;
-}
-
-.calc-result-card {
-  width: fit-content !important;
-  min-width: 250px !important;
-  max-width: 280px !important;
-}
-
-.chart-canvas-wrap,
-.chart-wrap,
-.chart-container,
-.tc-chart-wrap {
-  width: 1200px !important;
-  max-width: 1200px !important;
-  min-width: 1200px !important;
-  height: 560px !important;
-  max-height: 560px !important;
-  margin: 6px 0 0 0 !important;
-  overflow: visible !important;
-}
-
-#tcShiftChartCanvas,
-.chart-canvas-wrap canvas,
-.chart-wrap canvas,
-.chart-container canvas,
-.tc-chart-wrap canvas,
-.chart-section-card canvas {
-  width: 1200px !important;
-  height: 560px !important;
-  max-width: 1200px !important;
-  max-height: 560px !important;
-}
-
-.excluded-row,
-.excluded-row td {
-  background: #f8d7da !important;
-  color: #777 !important;
-  text-decoration: line-through !important;
-}
-
-.excluded-row .shift-cell,
-.excluded-row .muted-cell {
-  color: #777 !important;
-  text-decoration: line-through !important;
-}
-
-.row-status-badge.excluded,
-.row-status-badge.deleted {
-  color: #c62828 !important;
-  background: #f8d7da !important;
-  text-decoration: none !important;
-}
-
-.shift-danger {
-  color: #c62828 !important;
-  background: transparent !important;
-}
-
 .drag-select-box {
   position: absolute;
   border: 1px dashed #1976d2;
@@ -713,23 +628,6 @@ input[type="checkbox"] {
 
 .app-shell {
   min-height: calc(100vh - 48px) !important;
-}
-
-.tc-table-stats-layout,
-.tc-main-layout,
-.tc-content-layout,
-.tc-upper-layout {
-  grid-template-columns: 720px 300px !important;
-  gap: 10px !important;
-  justify-content: start !important;
-  align-items: start !important;
-}
-
-.tc-table-area,
-.tool-table-wrap {
-  width: auto !important;
-  min-width: 0 !important;
-  max-width: 1030px !important;
 }
 
 .tc-shift-data-table,
@@ -779,21 +677,17 @@ input[type="checkbox"] {
   width: 86px !important;
 }
 
-.tc-inline-stats-panel {
-  width: 300px !important;
-  min-width: 300px !important;
-}
-
 .side-stats-grid {
   grid-template-columns: repeat(2, max-content) !important;
   justify-content: start !important;
-  gap: 8px !important;
+  align-items: start !important;
+  gap: 7px !important;
 }
 
 .mini-stat-card {
-  width: 112px !important;
-  min-width: 112px !important;
-  max-width: 112px !important;
+  width: 106px !important;
+  min-width: 106px !important;
+  max-width: 106px !important;
   padding: 0 !important;
   background: transparent !important;
 }
@@ -814,8 +708,8 @@ input[type="checkbox"] {
 
 .mini-stat-value {
   display: block !important;
-  width: 112px !important;
-  padding: 7px 8px !important;
+  width: 106px !important;
+  padding: 6px 7px !important;
   background: #c8c8c8 !important;
   border-top: 1px solid #8f8f8f !important;
   border-left: 1px solid #8f8f8f !important;
@@ -847,30 +741,6 @@ input[type="checkbox"] {
   max-width: 220px !important;
 }
 
-.chart-canvas-wrap,
-.chart-wrap,
-.chart-container,
-.tc-chart-wrap {
-  width: 1200px !important;
-  max-width: 1200px !important;
-  min-width: 1200px !important;
-  height: 560px !important;
-  max-height: 560px !important;
-  margin: 6px 0 0 0 !important;
-}
-
-#tcShiftChartCanvas,
-.chart-canvas-wrap canvas,
-.chart-wrap canvas,
-.chart-container canvas,
-.tc-chart-wrap canvas,
-.chart-section-card canvas {
-  width: 1200px !important;
-  height: 560px !important;
-  max-width: 1200px !important;
-  max-height: 560px !important;
-}
-
 .excluded-row,
 .excluded-row td {
   background: #fde9ea !important;
@@ -896,15 +766,6 @@ input[type="checkbox"] {
   background: transparent !important;
 }
 
-@media (max-width: 1400px) {
-  .tc-table-stats-layout,
-  .tc-main-layout,
-  .tc-content-layout,
-  .tc-upper-layout {
-    grid-template-columns: 720px 300px !important;
-  }
-}
-
 .tool-summary,
 .tc-data-count {
   min-height: 30px !important;
@@ -912,14 +773,6 @@ input[type="checkbox"] {
   align-items: center !important;
   padding: 5px 8px !important;
   line-height: 1.2 !important;
-}
-
-.tool-table-wrap,
-.tc-table-area {
-  width: fit-content !important;
-  max-width: fit-content !important;
-  min-width: 0 !important;
-  padding-right: 8px !important;
 }
 
 .tc-table-stats-layout,
@@ -942,26 +795,16 @@ input[type="checkbox"] {
 }
 
 .chart-section-card {
-  width: fit-content !important;
-  min-width: 1250px !important;
-  max-width: none !important;
+  width: 1260px !important;
+  min-width: 1260px !important;
+  max-width: 1260px !important;
   display: block !important;
+  margin-top: 18px !important;
+  overflow: visible !important;
 }
 
 .chart-section-card::before {
   inset: 0 !important;
-}
-
-.chart-canvas-wrap {
-  position: relative !important;
-  z-index: 5 !important;
-  pointer-events: auto !important;
-}
-
-#tcShiftChartCanvas {
-  position: relative !important;
-  z-index: 6 !important;
-  pointer-events: auto !important;
 }
 
 .chart-panel-top,
@@ -994,8 +837,8 @@ input[type="checkbox"] {
 
 .offset-result-value {
   display: block !important;
-  width: 128px !important;
-  padding: 7px 8px !important;
+  width: 106px !important;
+  padding: 6px 7px !important;
   background: #c8c8c8 !important;
   border-top: 1px solid #8f8f8f !important;
   border-left: 1px solid #8f8f8f !important;
@@ -1009,6 +852,7 @@ input[type="checkbox"] {
   width: fit-content !important;
   min-width: 0 !important;
   max-width: none !important;
+  padding: 8px !important;
 }
 
 .main-content,
@@ -1048,8 +892,9 @@ input[type="checkbox"] {
   width: fit-content !important;
   max-width: fit-content !important;
   min-width: 0 !important;
-  padding: 8px !important;
-  margin-top: 6px !important;
+  padding: 6px !important;
+  margin-top: 0 !important;
+  border: 0 !important;
   background: var(--panel) !important;
 }
 
@@ -1062,30 +907,6 @@ input[type="checkbox"] {
 .tool-table,
 .dynamic-table {
   margin: 0 !important;
-}
-
-.excluded-row:hover,
-.excluded-row:hover td {
-  background: #f9dadd !important;
-}
-
-.tc-inline-stats-panel {
-  padding: 8px !important;
-}
-
-.side-stats-grid {
-  gap: 7px !important;
-}
-
-.mini-stat-card {
-  width: 106px !important;
-  min-width: 106px !important;
-  max-width: 106px !important;
-}
-
-.mini-stat-value {
-  width: 106px !important;
-  padding: 6px 7px !important;
 }
 
 .calc-result-wrap {
@@ -1103,33 +924,12 @@ input[type="checkbox"] {
   max-width: 106px !important;
 }
 
-.offset-result-value {
-  width: 106px !important;
-  padding: 6px 7px !important;
-}
-
 .offset-edit-note {
   grid-column: 1 / -1;
   font-size: 11px;
   color: #555;
   margin-top: 3px;
   white-space: nowrap;
-}
-
-.chart-section-card {
-  width: 1260px !important;
-  min-width: 1260px !important;
-  max-width: 1260px !important;
-  overflow: visible !important;
-}
-
-.chart-section-card {
-  margin-top: 18px !important;
-}
-
-.chart-canvas-wrap,
-#tcShiftChartCanvas {
-  pointer-events: auto !important;
 }
 
 .feature-link-card,
@@ -1203,23 +1003,10 @@ input[type="checkbox"] {
   margin-bottom: 5px !important;
 }
 
-.tc-table-stats-layout,
-.tc-main-layout,
-.tc-content-layout,
-.tc-upper-layout {
-  align-items: start !important;
-}
-
 .tool-table-wrap,
 .tc-table-area,
 .tc-inline-stats-panel {
   margin-top: 0 !important;
-}
-
-.tool-table-wrap,
-.tc-table-area {
-  padding: 6px !important;
-  border: 0 !important;
 }
 
 .excluded-row:hover,

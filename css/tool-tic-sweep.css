@@ -1,0 +1,203 @@
+/* TIC Sweep Treatment Record analyzer. */
+
+.tic-sweep-tool {
+  width: 100%;
+}
+
+.tic-sweep-status.done {
+  color: var(--green);
+  font-weight: 800;
+}
+
+.tic-sweep-status.error {
+  color: var(--red);
+  font-weight: 800;
+}
+
+.tic-sweep-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0;
+}
+
+.tic-sweep-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+}
+
+.tic-sweep-pulse-input {
+  width: 58px;
+  min-height: 24px;
+  padding: 1px 5px;
+}
+
+.tic-sweep-range {
+  width: 340px;
+  max-width: 100%;
+}
+
+.tic-sweep-charts {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.tic-sweep-chart-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.tic-sweep-chart-card {
+  width: fit-content;
+  max-width: 100%;
+  padding: 8px;
+}
+
+.tic-sweep-chart-card.wide {
+  width: fit-content;
+}
+
+.tic-sweep-chart-title {
+  display: none;
+}
+
+.tic-sweep-chart-card canvas {
+  display: block;
+  width: 560px;
+  height: 330px;
+  max-width: 100%;
+}
+
+.tic-sweep-scatter-card {
+  width: 716px;
+  max-width: calc(50% - 8px);
+}
+
+.tic-sweep-scatter-card canvas {
+  width: 700px;
+  height: 360px;
+}
+
+.tic-sweep-chart-card.wide canvas {
+  width: 1140px;
+  height: 350px;
+}
+
+.tic-sweep-empty {
+  padding: 10px;
+}
+
+.tic-sweep-legend {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  column-gap: 14px;
+  row-gap: 5px;
+  margin: 2px 0 6px;
+  color: #555;
+}
+
+.tic-sweep-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.tic-sweep-legend-item input {
+  width: 16px;
+  height: 16px;
+}
+
+.tic-sweep-legend-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.tic-sweep-modal[hidden] {
+  display: none;
+}
+
+.tic-sweep-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.tic-sweep-modal-panel {
+  width: min(820px, calc(100vw - 48px));
+  max-height: calc(100vh - 80px);
+  overflow: auto;
+  padding: 10px;
+  background: #efefef;
+  border: 2px solid #aaa;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.28);
+}
+
+.tic-sweep-modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.tic-sweep-modal-head h3,
+.tic-sweep-modal-panel h4 {
+  margin: 0;
+}
+
+.tic-sweep-raw-grid {
+  display: grid;
+  grid-template-columns: 230px minmax(0, 1fr);
+  border-top: 1px solid #c8c8c8;
+  border-left: 1px solid #c8c8c8;
+}
+
+.tic-sweep-raw-key,
+.tic-sweep-raw-value {
+  padding: 6px 8px;
+  border-right: 1px solid #c8c8c8;
+  border-bottom: 1px solid #c8c8c8;
+}
+
+.tic-sweep-raw-key {
+  font-weight: 800;
+  background: #d6d6d6;
+}
+
+.tic-sweep-raw-value {
+  background: #f7f7f7;
+  word-break: break-word;
+}
+
+.tic-sweep-raw-columns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.tic-sweep-raw-columns span {
+  padding: 3px 8px;
+  background: #f7f7f7;
+  border: 1px solid #c8c8c8;
+}
+
+@media (max-width: 1500px) {
+  .tic-sweep-scatter-card {
+    max-width: 100%;
+  }
+}

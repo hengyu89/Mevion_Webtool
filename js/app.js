@@ -84,6 +84,95 @@ function bindMenuEvents() {
   });
 }
 
+function buildServiceMenuHtml() {
+  return `
+    <div class="service-menu-panel" role="menu">
+      ${menuData.map((item) => {
+        const hasChildren = Array.isArray(item.children) && item.children.length > 0;
+        return `
+          <div class="service-menu-entry-wrap">
+            <button
+              class="service-menu-entry ${hasChildren ? "has-children" : ""}"
+              type="button"
+              data-service-menu-id="${item.id}"
+              data-service-menu-type="${hasChildren ? "parent" : "page"}"
+              role="menuitem"
+            >
+              <span>${item.title}</span>
+              ${hasChildren ? '<span class="service-menu-arrow">▶</span>' : ""}
+            </button>
+            ${hasChildren ? `
+              <div class="service-submenu-panel" role="menu">
+                ${item.children.map((child) => `
+                  <button
+                    class="service-menu-entry service-submenu-entry"
+                    type="button"
+                    data-service-menu-id="${child.id}"
+                    data-service-menu-parent="${item.id}"
+                    data-service-menu-type="child"
+                    role="menuitem"
+                  >
+                    <span>${child.title}</span>
+                  </button>
+                `).join("")}
+              </div>
+            ` : ""}
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function closeServiceMenu() {
+  const popup = document.getElementById("serviceMenuPopup");
+  const btn = document.getElementById("serviceMenuBtn");
+  if (!popup || !btn) return;
+  popup.hidden = true;
+  btn.setAttribute("aria-expanded", "false");
+}
+
+function bindServiceMenu() {
+  const btn = document.getElementById("serviceMenuBtn");
+  const popup = document.getElementById("serviceMenuPopup");
+  if (!btn || !popup) return;
+
+  popup.innerHTML = buildServiceMenuHtml();
+
+  btn.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const willOpen = popup.hidden;
+    popup.hidden = !willOpen;
+    btn.setAttribute("aria-expanded", String(willOpen));
+  });
+
+  popup.addEventListener("click", (event) => {
+    const menuBtn = event.target.closest("button[data-service-menu-id]");
+    if (!menuBtn) return;
+
+    const type = menuBtn.dataset.serviceMenuType;
+    const pageId = menuBtn.dataset.serviceMenuId;
+
+    if (type === "parent") {
+      setPage(pageId);
+      return;
+    }
+
+    setPage(pageId);
+    closeServiceMenu();
+  });
+
+  document.addEventListener("click", (event) => {
+    if (popup.hidden) return;
+    if (event.target.closest("#serviceMenuPopup") || event.target.closest("#serviceMenuBtn")) return;
+    closeServiceMenu();
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeServiceMenu();
+  });
+}
+
 function initBackgroundFallback() {
   const bg = document.querySelector(".page-bg");
   if (!bg) return;
@@ -117,12 +206,17 @@ function initPageModule(pageId) {
       window.activateTicMonitorToolPage();
     }
   }
+
+  if (pageId === "daily-tic-sweep") {
+    initTicSweepToolPage();
+  }
 }
 
 document.addEventListener("DOMContentLoaded", () => {
   initBackgroundFallback();
   bindMenuEvents();
   bindSidebarToggle();
+  bindServiceMenu();
   applySidebarState();
   setPage(state.currentPageId);
   console.log("App initialized");
