@@ -600,12 +600,18 @@ function getTicSweepHoverKey(region) {
 }
 
 function resetTicSweepScatterVisibility() {
-  ["ticSweepScatterInplane", "ticSweepScatterCrossplane"].forEach((canvasId) => {
-    ticSweepState.scatterVisible[canvasId] = {};
-    TIC_SWEEP_SCATTER_SERIES.forEach((series) => {
-      ticSweepState.scatterVisible[canvasId][series.id] = true;
-    });
-  });
+  ticSweepState.scatterVisible.ticSweepScatterInplane = {
+    usyDsy: false,
+    usxDsx: true,
+    usyDoseplane1: false,
+    usxDoseplane2: true
+  };
+  ticSweepState.scatterVisible.ticSweepScatterCrossplane = {
+    usyDsy: true,
+    usxDsx: false,
+    usyDoseplane1: true,
+    usxDoseplane2: false
+  };
 }
 
 function getTicSweepScatterVisibility(canvasId) {
@@ -870,35 +876,25 @@ function closeTicSweepRawModal() {
 
 function buildTicSweepRawModalHtml(analysis) {
   const meta = analysis.meta || {};
-  const pulse = analysis.pulses[ticSweepState.pulseIndex - 1] || analysis.pulses[0];
-  const rawRows = [
+  const summaryRows = [
     ["Source File", analysis.sourceFileName],
     ["Beam Number", meta["Beam Number"] || "-"],
     ["Beam Fraction", meta["Beam Fraction"] || "-"],
     ["Treatment Start Local Time", meta["Treatment Start Local Time"] || "-"],
-    ["Total Pulses", analysis.totalPulses],
-    ["Current Pulse", pulse.rowIndex],
-    ["Timestamp (ms)", pulse.timestamp],
-    ["Spot Index", pulse.spotIndex],
-    ["IP(X) Position (mm)", pulse.inplanePosition],
-    ["CP(Y) Position (mm)", pulse.crossplanePosition],
-    ["USy-DSy (CP Sum)", pulse.metrics.usyDsy],
-    ["USx-DSx (IP Sum)", pulse.metrics.usxDsx],
-    ["USy - Doseplane1", pulse.metrics.usyDoseplane1],
-    ["USx - Doseplane2", pulse.metrics.usxDoseplane2]
+    ["Total Pulses", analysis.totalPulses]
   ];
-  const keyColumns = [
+  const tableColumns = [
     "Timestamp (ms)",
     "Spot Index",
-    "Inplane Position (mm)",
-    "Crossplane Position (mm)",
-    "USy - DSy (Crossplane Sum)",
-    "USx-DSx (Inplane Sum)",
+    "IP(X) Position (mm)",
+    "CP(Y) Position (mm)",
+    "USy-DSy (CP Sum)",
+    "USx-DSx (IP Sum)",
     "USy - Doseplane1",
-    "USx - Doseplane2",
-    "Crossplane TIC 1-96",
-    "Inplane TIC 1-96"
+    "USx - Doseplane2"
   ];
+  for (let i = 1; i <= TIC_SWEEP_CHANNEL_COUNT; i += 1) tableColumns.push(`CP(Y) TIC ${i}`);
+  for (let i = 1; i <= TIC_SWEEP_CHANNEL_COUNT; i += 1) tableColumns.push(`IP(X) TIC ${i}`);
 
   return `
     <div class="tic-sweep-modal-panel" role="dialog" aria-modal="true" aria-label="TIC Sweep Raw 参数">
@@ -906,22 +902,52 @@ function buildTicSweepRawModalHtml(analysis) {
         <h3>Raw 参数</h3>
         <button class="tool-btn tic-sweep-modal-close" type="button" data-tic-sweep-modal-close>关闭</button>
       </div>
-      <div class="tic-sweep-raw-grid">
-        ${rawRows.map(([key, value]) => `
-          <div class="tic-sweep-raw-key">${escapeTicSweepHtml(key)}</div>
-          <div class="tic-sweep-raw-value">${escapeTicSweepHtml(formatTicSweepRawValue(value))}</div>
+      <div class="tic-sweep-raw-summary">
+        ${summaryRows.map(([key, value]) => `
+          <span><strong>${escapeTicSweepHtml(key)}:</strong> ${escapeTicSweepHtml(formatTicSweepRawValue(value))}</span>
         `).join("")}
       </div>
-      <h4>识别到的关键参数列</h4>
-      <div class="tic-sweep-raw-columns">
-        ${keyColumns.map((name) => `<span>${escapeTicSweepHtml(name)}</span>`).join("")}
+      <div class="tic-sweep-raw-table-wrap" role="region" aria-label="TIC Sweep raw data table">
+        <table class="tic-sweep-raw-table">
+          <thead>
+            <tr>
+              <th class="tic-sweep-sticky-corner">Pulse #</th>
+              ${tableColumns.map((column) => `<th>${escapeTicSweepHtml(column)}</th>`).join("")}
+            </tr>
+          </thead>
+          <tbody>
+            ${analysis.pulses.map((pulse) => {
+              const values = [
+                pulse.timestamp,
+                pulse.spotIndex,
+                pulse.inplanePosition,
+                pulse.crossplanePosition,
+                pulse.metrics.usyDsy,
+                pulse.metrics.usxDsx,
+                pulse.metrics.usyDoseplane1,
+                pulse.metrics.usxDoseplane2,
+                ...pulse.crossplaneTic,
+                ...pulse.inplaneTic
+              ];
+              return `
+                <tr>
+                  <th>${pulse.rowIndex}</th>
+                  ${values.map((value) => `<td>${escapeTicSweepHtml(formatTicSweepRawValue(value))}</td>`).join("")}
+                </tr>
+              `;
+            }).join("")}
+          </tbody>
+        </table>
       </div>
     </div>
   `;
 }
 
 function formatTicSweepRawValue(value) {
-  if (Number.isFinite(value)) return String(value);
+  if (Number.isFinite(value)) {
+    if (Number.isInteger(value)) return String(value);
+    return String(Number(value.toFixed(6)));
+  }
   return value == null || value === "" ? "-" : String(value);
 }
 
