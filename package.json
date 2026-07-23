@@ -5,9 +5,10 @@
   "description": "Offline browser tools for on-site log and daily data analysis.",
   "scripts": {
     "build:zip": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-offline-zip.ps1",
-    "check": "npm run lint",
+    "check": "npm run lint && npm test",
     "lint": "eslint \"js/**/*.js\" \"data/**/*.js\"",
-    "lint:fix": "eslint \"js/**/*.js\" \"data/**/*.js\" --fix"
+    "lint:fix": "eslint \"js/**/*.js\" \"data/**/*.js\" --fix",
+    "test": "node --test tests/**/*.test.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
