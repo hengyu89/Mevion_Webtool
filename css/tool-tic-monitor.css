@@ -104,21 +104,21 @@
 
 .tic-chart-wrap {
   position: relative;
-  width: 1200px;
-  max-width: 1200px;
-  min-width: 1200px;
-  height: 560px;
-  max-height: 560px;
+  width: 1000px;
+  max-width: 1000px;
+  min-width: 1000px;
+  height: 460px;
+  max-height: 460px;
   margin: 6px 0 0 0;
   overflow: visible;
 }
 
 .tic-chart-wrap canvas {
   display: block;
-  width: 1200px;
-  height: 560px;
-  max-width: 1200px;
-  max-height: 560px;
+  width: 1000px;
+  height: 460px;
+  max-width: 1000px;
+  max-height: 460px;
   cursor: crosshair;
 }
 
@@ -149,5 +149,8 @@
 }
 
 #ticChartsRoot .tic-chart-card {
+  width: 1020px !important;
+  min-width: 1020px !important;
+  max-width: 1020px !important;
   margin-top: 0 !important;
 }

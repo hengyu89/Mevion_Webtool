@@ -111,6 +111,194 @@
   display: none;
 }
 
+.tool-directory-section {
+  padding: 18px 10px 10px;
+}
+
+.tool-directory-grid {
+  display: grid;
+  grid-template-columns: 330px 300px 220px;
+  gap: 12px;
+  width: max-content;
+  max-width: 100%;
+  align-items: start;
+}
+
+.tool-directory-column {
+  position: relative;
+  min-width: 0;
+  padding: 16px 10px 10px;
+  border: 1px solid #aaa;
+  box-shadow:
+    inset 1px 1px 0 #fff,
+    inset -1px -1px 0 #c6c6c6;
+}
+
+.tool-directory-column-title {
+  position: absolute;
+  top: -8px;
+  left: 8px;
+  margin: 0;
+  padding: 0 5px;
+  background: var(--panel);
+  font-size: 13px;
+  line-height: 1.2;
+  font-weight: 800;
+}
+
+.tool-directory-column-body,
+.tool-directory-list {
+  display: grid;
+  gap: 8px;
+}
+
+.tool-directory-link {
+  width: 100%;
+  min-height: 52px;
+  padding: 7px 10px;
+  display: grid;
+  gap: 3px;
+  justify-items: start;
+  align-content: center;
+  border: 1px solid #a0a0a0;
+  border-radius: 0;
+  background: #eeeeee;
+  box-shadow:
+    inset 1px 1px 0 #fff,
+    inset -1px -1px 0 #b7b7b7;
+  color: #111;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tool-directory-link:hover,
+.tool-directory-link:focus-visible {
+  background: #f8f8f2;
+  outline: 1px solid #777;
+  outline-offset: -2px;
+}
+
+.tool-directory-link:active {
+  background: #dedede;
+  box-shadow:
+    inset 1px 1px 2px rgba(0,0,0,.28),
+    inset -1px -1px 0 #fff;
+}
+
+.tool-directory-link-title {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.tool-directory-link-desc {
+  color: #555;
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.tool-directory-group {
+  position: relative;
+  margin-top: 6px;
+  padding: 16px 8px 8px;
+  border: 1px solid #aaa;
+  box-shadow:
+    inset 1px 1px 0 #fff,
+    inset -1px -1px 0 #c6c6c6;
+}
+
+.tool-directory-group-title {
+  position: absolute;
+  top: -8px;
+  left: 8px;
+  margin: 0;
+  padding: 0 5px;
+  background: var(--panel);
+  font-size: 12px;
+  line-height: 1.2;
+  font-weight: 800;
+}
+
+.tool-directory-empty {
+  min-height: 28px;
+}
+
+.copy-list-section {
+  padding: 18px 10px 10px;
+}
+
+.copy-list-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 1px 0 3px;
+}
+
+.copy-list {
+  width: max-content;
+  max-width: 100%;
+  display: grid;
+  grid-template-columns: max-content max-content 24px;
+  column-gap: 8px;
+  row-gap: 3px;
+  align-items: center;
+}
+
+.copy-list-row {
+  display: contents;
+}
+
+.copy-list-label {
+  padding: 2px 0;
+  color: #222;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.copy-list-label::after {
+  content: ":";
+}
+
+.copy-list-value {
+  padding: 2px 0;
+  color: #111;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.copy-value-btn {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #444;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.copy-value-btn:hover,
+.copy-value-btn:focus-visible {
+  border-color: #aaa;
+  background: #e1e1e1;
+  outline: 0;
+}
+
+.copy-value-btn.copied {
+  color: #075e20;
+  background: transparent;
+}
+
+.copy-value-btn.copy-failed {
+  color: #8c0000;
+  background: transparent;
+}
+
 .side-list {
   display: flex;
   flex-direction: column;
@@ -128,6 +316,18 @@
   background: #c9c9c9;
   font-size: 11px;
   font-weight: 800;
+}
+
+@media (max-width: 900px) {
+  .tool-directory-grid {
+    grid-template-columns: minmax(240px, 1fr);
+    width: 100%;
+  }
+
+  .tool-directory-empty {
+    min-height: 32px;
+  }
+
 }
 
 

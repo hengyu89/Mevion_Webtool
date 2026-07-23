@@ -428,11 +428,11 @@
 .chart-wrap,
 .chart-container,
 .tc-chart-wrap {
-  width: 600px;
-  max-width: 600px;
-  min-width: 600px;
-  height: 280px;
-  max-height: 280px;
+  width: 720px;
+  max-width: 720px;
+  min-width: 720px;
+  height: 336px;
+  max-height: 336px;
   margin: 6px 0 0 0;
   overflow: visible;
 }
@@ -443,10 +443,10 @@
 .chart-container canvas,
 .tc-chart-wrap canvas,
 .chart-section-card canvas {
-  width: 600px;
-  height: 280px;
-  max-width: 600px;
-  max-height: 280px;
+  width: 720px;
+  height: 336px;
+  max-width: 720px;
+  max-height: 336px;
   display: block;
 }
 
@@ -681,7 +681,13 @@ input[type="checkbox"] {
   grid-template-columns: repeat(2, max-content) !important;
   justify-content: start !important;
   align-items: start !important;
-  gap: 7px !important;
+  gap: 10px !important;
+}
+
+.axis-stat-column,
+.offset-param-column {
+  display: grid;
+  gap: 7px;
 }
 
 .mini-stat-card {
@@ -720,19 +726,38 @@ input[type="checkbox"] {
 }
 
 .calc-form-grid {
-  grid-template-columns: repeat(2, 96px) !important;
-  column-gap: 14px !important;
+  grid-template-columns: repeat(2, 112px) !important;
+  column-gap: 10px !important;
   row-gap: 8px !important;
 }
 
+.offset-param-grid {
+  align-items: start !important;
+}
+
+.offset-param-column {
+  gap: 8px;
+}
+
 .calc-field {
-  width: 96px !important;
+  width: 112px !important;
+}
+
+.offset-param-grid .calc-field > span {
+  font-size: 10px !important;
+  line-height: 1.15 !important;
+  white-space: nowrap !important;
 }
 
 .calc-input,
 .offset-param-input {
-  width: 92px !important;
-  min-width: 92px !important;
+  width: 88px !important;
+  min-width: 88px !important;
+}
+
+#tcInlineStatsPanel .offset-param-input {
+  background: #fff !important;
+  box-shadow: inset 1px 1px 0 #fff !important;
 }
 
 .calc-result-card {
@@ -839,11 +864,12 @@ input[type="checkbox"] {
   display: block !important;
   width: 106px !important;
   padding: 6px 7px !important;
-  background: #c8c8c8 !important;
-  border-top: 1px solid #8f8f8f !important;
-  border-left: 1px solid #8f8f8f !important;
-  border-right: 1px solid #fff !important;
-  border-bottom: 1px solid #fff !important;
+  color: #075e20 !important;
+  background: #c7e8c9 !important;
+  border-top: 1px solid #5c9d65 !important;
+  border-left: 1px solid #5c9d65 !important;
+  border-right: 1px solid #f5fff6 !important;
+  border-bottom: 1px solid #f5fff6 !important;
   font-size: 14px !important;
   font-weight: 900 !important;
 }

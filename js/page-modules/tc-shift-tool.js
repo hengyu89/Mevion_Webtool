@@ -1243,31 +1243,33 @@ function renderTcShiftStatsToSide(stats) {
     <section class="card side-card stats-section-card">
       <h3 class="side-card-title">Shift 统计</h3>
       <div class="side-stats-grid">
-        <div class="mini-stat-card">
-          <div class="mini-stat-label">Y (CP) min</div>
-          <div class="mini-stat-value">${formatStat(stats.yMin)}</div>
+        <div class="axis-stat-column">
+          <div class="mini-stat-card">
+            <div class="mini-stat-label">X (IP) Max</div>
+            <div class="mini-stat-value">${formatStat(stats.xMax)}</div>
+          </div>
+          <div class="mini-stat-card">
+            <div class="mini-stat-label">X (IP) Min</div>
+            <div class="mini-stat-value">${formatStat(stats.xMin)}</div>
+          </div>
+          <div class="mini-stat-card">
+            <div class="mini-stat-label">X Max - Min</div>
+            <div class="mini-stat-value">${formatStat(stats.xRange)}</div>
+          </div>
         </div>
-        <div class="mini-stat-card">
-          <div class="mini-stat-label">Y (CP) max</div>
-          <div class="mini-stat-value">${formatStat(stats.yMax)}</div>
-        </div>
-
-        <div class="mini-stat-card">
-          <div class="mini-stat-label">X (IP) min</div>
-          <div class="mini-stat-value">${formatStat(stats.xMin)}</div>
-        </div>
-        <div class="mini-stat-card">
-          <div class="mini-stat-label">X (IP) max</div>
-          <div class="mini-stat-value">${formatStat(stats.xMax)}</div>
-        </div>
-
-        <div class="mini-stat-card">
-          <div class="mini-stat-label">Y max - min</div>
-          <div class="mini-stat-value">${formatStat(stats.yRange)}</div>
-        </div>
-        <div class="mini-stat-card">
-          <div class="mini-stat-label">X max - min</div>
-          <div class="mini-stat-value">${formatStat(stats.xRange)}</div>
+        <div class="axis-stat-column">
+          <div class="mini-stat-card">
+            <div class="mini-stat-label">Y (CP) Max</div>
+            <div class="mini-stat-value">${formatStat(stats.yMax)}</div>
+          </div>
+          <div class="mini-stat-card">
+            <div class="mini-stat-label">Y (CP) Min</div>
+            <div class="mini-stat-value">${formatStat(stats.yMin)}</div>
+          </div>
+          <div class="mini-stat-card">
+            <div class="mini-stat-label">Y Max - Min</div>
+            <div class="mini-stat-value">${formatStat(stats.yRange)}</div>
+          </div>
         </div>
       </div>
     </section>
@@ -1275,64 +1277,65 @@ function renderTcShiftStatsToSide(stats) {
     <section class="card side-card offset-section-card">
       <h3 class="side-card-title">Offset 计算</h3>
 
-      <div class="calc-form-grid single-col">
-        <label class="calc-field">
-          <span>Y (CP) slope</span>
-          <input
-            id="ySlopeInput"
-            data-param-key="ySlope"
-            type="number"
-            step="any"
-            class="calc-input compact-input narrow-input offset-param-input"
-            value="${escapeHtml(offsetParams.ySlope)}"
-          />
-        </label>
-
-        <label class="calc-field">
-          <span>Y (CP) offset</span>
-          <input
-            id="yOffsetInput"
-            data-param-key="yOffset"
-            type="number"
-            step="any"
-            class="calc-input compact-input narrow-input offset-param-input"
-            value="${escapeHtml(offsetParams.yOffset)}"
-          />
-        </label>
-
-        <label class="calc-field">
-          <span>X (IP) slope</span>
-          <input
-            id="xSlopeInput"
-            data-param-key="xSlope"
-            type="number"
-            step="any"
-            class="calc-input compact-input narrow-input offset-param-input"
-            value="${escapeHtml(offsetParams.xSlope)}"
-          />
-        </label>
-
-        <label class="calc-field">
-          <span>X (IP) offset</span>
-          <input
-            id="xOffsetInput"
-            data-param-key="xOffset"
-            type="number"
-            step="any"
-            class="calc-input compact-input narrow-input offset-param-input"
-            value="${escapeHtml(offsetParams.xOffset)}"
-          />
-        </label>
+      <div class="calc-form-grid offset-param-grid">
+        <div class="offset-param-column">
+          <label class="calc-field">
+            <span>Inplane Slope</span>
+            <input
+              id="xSlopeInput"
+              data-param-key="xSlope"
+              type="number"
+              step="any"
+              class="calc-input compact-input narrow-input offset-param-input"
+              value="${escapeHtml(offsetParams.xSlope)}"
+            />
+          </label>
+          <label class="calc-field">
+            <span>Inplane Offset</span>
+            <input
+              id="xOffsetInput"
+              data-param-key="xOffset"
+              type="number"
+              step="any"
+              class="calc-input compact-input narrow-input offset-param-input"
+              value="${escapeHtml(offsetParams.xOffset)}"
+            />
+          </label>
+        </div>
+        <div class="offset-param-column">
+          <label class="calc-field">
+            <span>Crossplane Slope</span>
+            <input
+              id="ySlopeInput"
+              data-param-key="ySlope"
+              type="number"
+              step="any"
+              class="calc-input compact-input narrow-input offset-param-input"
+              value="${escapeHtml(offsetParams.ySlope)}"
+            />
+          </label>
+          <label class="calc-field">
+            <span>Crossplane Offset</span>
+            <input
+              id="yOffsetInput"
+              data-param-key="yOffset"
+              type="number"
+              step="any"
+              class="calc-input compact-input narrow-input offset-param-input"
+              value="${escapeHtml(offsetParams.yOffset)}"
+            />
+          </label>
+        </div>
       </div>
 
       <div class="calc-result-wrap">
         <div class="calc-result-card offset-result-card">
-          <div class="mini-stat-label offset-result-label">Y (CP) New Offset</div>
-          <div id="yNewOffsetOutput" class="mini-stat-value offset-result-value">--</div>
-        </div>
-        <div class="calc-result-card offset-result-card">
           <div class="mini-stat-label offset-result-label">X (IP) New Offset</div>
           <div id="xNewOffsetOutput" class="mini-stat-value offset-result-value">--</div>
+        </div>
+        <div class="calc-result-card offset-result-card">
+          <div class="mini-stat-label offset-result-label">Y (CP) New Offset</div>
+          <div id="yNewOffsetOutput" class="mini-stat-value offset-result-value">--</div>
         </div>
         <div class="offset-edit-note">Edit in XYZ.xml → IP/CP offset</div>
       </div>

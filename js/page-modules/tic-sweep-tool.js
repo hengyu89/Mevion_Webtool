@@ -19,6 +19,13 @@ const TIC_SWEEP_COLORS = {
   title: "#777"
 };
 
+const TIC_SWEEP_SUMMED_SERIES = [
+  { id: "yUs", label: "Y US Strips", color: "#2f73a9", source: "crossplaneTotals", start: 0, end: 32 },
+  { id: "yDs", label: "Y DS Strips", color: "#c85a17", source: "crossplaneTotals", start: 32, end: 96 },
+  { id: "xUs", label: "X US Strips", color: "#f2ad2e", source: "inplaneTotals", start: 0, end: 32 },
+  { id: "xDs", label: "X DS Strips", color: "#5b4a91", source: "inplaneTotals", start: 32, end: 96 }
+];
+
 const TIC_SWEEP_SCATTER_SERIES = [
   { id: "usyDsy", label: "USy-DSy (CP Sum)", color: "#0284c7" },
   { id: "usxDsx", label: "USx-DSx (IP Sum)", color: "#dc2626" },
@@ -305,8 +312,7 @@ function renderTicSweepResults() {
       ${buildTicSweepCanvasCard("ticSweepSingleCross", "CP(Y) TIC - Pulse #" + ticSweepState.pulseIndex)}
       ${buildTicSweepCanvasCard("ticSweepSingleInplane", "IP(X) TIC - Pulse #" + ticSweepState.pulseIndex)}
     </div>
-    ${buildTicSweepCanvasCard("ticSweepCrossTotal", `CP(Y) TIC Sweep - 累计计数 (${analysis.totalPulses} pulses)`, true)}
-    ${buildTicSweepCanvasCard("ticSweepInplaneTotal", `IP(X) TIC Sweep - 累计计数 (${analysis.totalPulses} pulses)`, true)}
+    ${buildTicSweepSummedCanvasCard(`TIC Sweep - 累计计数 (${analysis.totalPulses} pulses)`)}
     <div class="tic-sweep-chart-row">
       ${buildTicSweepScatterCanvasCard("ticSweepScatterInplane", "dCompare vs. IP(X) Position")}
       ${buildTicSweepScatterCanvasCard("ticSweepScatterCrossplane", "dCompare vs. CP(Y) Position")}
@@ -325,6 +331,15 @@ function buildTicSweepCanvasCard(id, title, wide = false) {
     <div class="card tic-sweep-chart-card ${wide ? "wide" : ""}">
       <div class="tic-sweep-chart-title">${escapeTicSweepHtml(title)}</div>
       <canvas id="${id}" width="${width}" height="${height}"></canvas>
+    </div>
+  `;
+}
+
+function buildTicSweepSummedCanvasCard(title) {
+  return `
+    <div class="card tic-sweep-chart-card tic-sweep-summed-card">
+      <div class="tic-sweep-chart-title">${escapeTicSweepHtml(title)}</div>
+      <canvas id="ticSweepSummedTotal" width="1100" height="540"></canvas>
     </div>
   `;
 }
@@ -398,8 +413,7 @@ function drawTicSweepCharts() {
   const pulse = analysis.pulses[ticSweepState.pulseIndex - 1] || analysis.pulses[0];
   drawTicSweepBarChart("ticSweepSingleCross", `CP(Y) TIC - Pulse #${ticSweepState.pulseIndex}`, pulse.crossplaneTic, "Channel (1-96)", "TIC Count");
   drawTicSweepBarChart("ticSweepSingleInplane", `IP(X) TIC - Pulse #${ticSweepState.pulseIndex}`, pulse.inplaneTic, "Channel (1-96)", "TIC Count");
-  drawTicSweepBarChart("ticSweepCrossTotal", `CP(Y) TIC Sweep - 累计计数 (${analysis.totalPulses} pulses)`, analysis.crossplaneTotals, "Channel (1-96)", "累计计数");
-  drawTicSweepBarChart("ticSweepInplaneTotal", `IP(X) TIC Sweep - 累计计数 (${analysis.totalPulses} pulses)`, analysis.inplaneTotals, "Channel (1-96)", "累计计数");
+  drawTicSweepSummedChart(analysis);
   drawTicSweepScatterChart("ticSweepScatterInplane", "dCompare vs. IP(X) Position", analysis.pulses, "inplanePosition", "IP(X) Position (mm)");
   drawTicSweepScatterChart("ticSweepScatterCrossplane", "dCompare vs. CP(Y) Position", analysis.pulses, "crossplanePosition", "CP(Y) Position (mm)");
 }
@@ -468,6 +482,173 @@ function drawTicSweepBarChart(canvasId, title, values, xLabel, yLabel) {
     ], hover.x + hover.width / 2, hover.y, width, height);
     ctx.restore();
   }
+}
+
+function drawTicSweepSummedChart(analysis) {
+  const canvasId = "ticSweepSummedTotal";
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+
+  const ctx = canvas.getContext("2d");
+  const width = canvas.width;
+  const height = canvas.height;
+  const title = `TIC Sweep - 累计计数 (${analysis.totalPulses} pulses)`;
+  const pad = { left: 112, right: 34, top: 62, bottom: 76 };
+  const chartW = width - pad.left - pad.right;
+  const chartH = height - pad.top - pad.bottom;
+  const groupGapUnits = 1.5;
+  const totalStripCount = TIC_SWEEP_SUMMED_SERIES.reduce((sum, series) => sum + series.end - series.start, 0);
+  const totalUnits = totalStripCount + groupGapUnits * (TIC_SWEEP_SUMMED_SERIES.length - 1);
+  const unitWidth = chartW / totalUnits;
+  const barWidth = Math.max(1, unitWidth - 0.7);
+  const regions = [];
+
+  const groups = TIC_SWEEP_SUMMED_SERIES.map((series) => ({
+    ...series,
+    values: analysis[series.source].slice(series.start, series.end)
+  }));
+  const allValues = groups.reduce((values, group) => values.concat(group.values), []);
+  const scale = getTicSweepSummedScale(Math.max(...allValues, 1));
+
+  clearTicSweepCanvas(ctx, width, height);
+  drawTicSweepCanvasTitle(ctx, title, width);
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(pad.left, pad.top, chartW, chartH);
+
+  ctx.save();
+  ctx.font = "12px Segoe UI";
+  ctx.fillStyle = "#333";
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  for (let value = 0; value <= scale.max + scale.step / 10; value += scale.step) {
+    const y = pad.top + chartH - (value / scale.max) * chartH;
+    ctx.fillText(formatTicSweepAxis(value), pad.left - 12, y);
+    ctx.strokeStyle = "#333";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(pad.left - 6, y);
+    ctx.lineTo(pad.left, y);
+    ctx.stroke();
+  }
+
+  let unitOffset = 0;
+  groups.forEach((group, groupIndex) => {
+    group.values.forEach((rawValue, stripIndex) => {
+      const value = Number(rawValue) || 0;
+      const x = pad.left + (unitOffset + stripIndex) * unitWidth;
+      const barH = (value / scale.max) * chartH;
+      const y = pad.top + chartH - barH;
+
+      ctx.fillStyle = group.color;
+      ctx.fillRect(x + 0.35, y, barWidth, barH);
+      ctx.strokeStyle = "#202020";
+      ctx.lineWidth = 0.8;
+      ctx.strokeRect(x + 0.35, y, barWidth, barH);
+
+      regions.push({
+        type: "summed-bar",
+        canvasId,
+        x: x + 0.35,
+        y,
+        width: barWidth,
+        height: Math.max(barH, 4),
+        series: group.label,
+        strip: stripIndex + 1,
+        value
+      });
+
+      if (stripIndex % 4 === 0) {
+        ctx.fillStyle = "#555";
+        ctx.font = "11px Segoe UI";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top";
+        ctx.fillText(String(stripIndex + 1), x + unitWidth / 2, pad.top + chartH + 10);
+      }
+    });
+
+    unitOffset += group.values.length;
+    if (groupIndex < groups.length - 1) unitOffset += groupGapUnits;
+  });
+
+  ctx.strokeStyle = "#333";
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(pad.left, pad.top);
+  ctx.lineTo(pad.left, pad.top + chartH);
+  ctx.lineTo(pad.left + chartW, pad.top + chartH);
+  ctx.stroke();
+
+  ctx.fillStyle = "#333";
+  ctx.font = "14px Segoe UI";
+  ctx.save();
+  ctx.translate(25, pad.top + chartH / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("Summed Counts", 0, 0);
+  ctx.restore();
+
+  ctx.textAlign = "center";
+  ctx.textBaseline = "alphabetic";
+  ctx.fillText("Strip Number", pad.left + chartW / 2, height - 16);
+  ctx.restore();
+
+  drawTicSweepSummedLegend(ctx, groups, pad.left + chartW - 154, pad.top + 12);
+  ticSweepChartRuntime.hitRegions.set(canvasId, regions);
+
+  const hover = ticSweepChartRuntime.hover;
+  if (hover && hover.canvasId === canvasId) {
+    ctx.save();
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(hover.x - 1, hover.y - 1, hover.width + 2, hover.height + 2);
+    drawTicSweepTooltip(ctx, [
+      hover.series,
+      `Strip: ${hover.strip}`,
+      `Summed Counts: ${formatTicSweepAxis(hover.value)}`
+    ], hover.x + hover.width / 2, hover.y, width, height);
+    ctx.restore();
+  }
+}
+
+function drawTicSweepSummedLegend(ctx, groups, x, y) {
+  const boxWidth = 146;
+  const rowHeight = 19;
+  const boxHeight = groups.length * rowHeight + 12;
+
+  ctx.save();
+  ctx.fillStyle = "rgba(255,255,255,0.94)";
+  ctx.strokeStyle = "#333";
+  ctx.lineWidth = 1;
+  ctx.fillRect(x, y, boxWidth, boxHeight);
+  ctx.strokeRect(x, y, boxWidth, boxHeight);
+  ctx.font = "11px Segoe UI";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+
+  groups.forEach((group, index) => {
+    const rowY = y + 7 + index * rowHeight;
+    ctx.fillStyle = group.color;
+    ctx.fillRect(x + 8, rowY, 48, 12);
+    ctx.strokeStyle = "#222";
+    ctx.strokeRect(x + 8, rowY, 48, 12);
+    ctx.fillStyle = "#222";
+    ctx.fillText(group.label, x + 63, rowY + 6);
+  });
+  ctx.restore();
+}
+
+function getTicSweepSummedScale(maxValue) {
+  const roughStep = maxValue / 9;
+  const power = Math.pow(10, Math.floor(Math.log10(roughStep)));
+  const fraction = roughStep / power;
+  let niceFraction = 10;
+  if (fraction <= 1) niceFraction = 1;
+  else if (fraction <= 2) niceFraction = 2;
+  else if (fraction <= 2.5) niceFraction = 2.5;
+  else if (fraction <= 5) niceFraction = 5;
+  const step = niceFraction * power;
+  return { step, max: Math.ceil(maxValue / step) * step };
 }
 
 function drawTicSweepScatterChart(canvasId, title, pulses, xKey, xLabel) {
@@ -563,7 +744,7 @@ function handleTicSweepChartMouseMove(event) {
   let bestDistance = Infinity;
 
   regions.forEach((region) => {
-    if (region.type === "bar") {
+    if (region.type === "bar" || region.type === "summed-bar") {
       if (mouseX >= region.x && mouseX <= region.x + region.width && mouseY >= region.y && mouseY <= region.y + region.height) {
         nearest = region;
         bestDistance = 0;
@@ -596,6 +777,7 @@ function handleTicSweepChartMouseLeave() {
 function getTicSweepHoverKey(region) {
   if (!region) return "";
   if (region.type === "bar") return `${region.canvasId}:bar:${region.channel}`;
+  if (region.type === "summed-bar") return `${region.canvasId}:summed-bar:${region.series}:${region.strip}`;
   return `${region.canvasId}:point:${region.series}:${region.pulse}:${region.xValue}:${region.yValue}`;
 }
 

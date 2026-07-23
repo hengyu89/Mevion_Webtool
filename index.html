@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="./css/layout.css" />
   <link rel="stylesheet" href="./css/service-frame.css" />
   <link rel="stylesheet" href="./css/pages-home.css" />
+  <link rel="stylesheet" href="./css/tool-error-analyzer.css" />
   <link rel="stylesheet" href="./css/tool-tc-shift.css" />
   <link rel="stylesheet" href="./css/tool-patient-counter.css" />
   <link rel="stylesheet" href="./css/tool-tic-monitor.css" />
@@ -37,7 +38,13 @@
       </main>
     </div>
     <div class="service-status-bar">
-      <button id="serviceMenuBtn" class="service-menu-btn" type="button" aria-haspopup="true" aria-expanded="false">Menu</button>
+      <button
+        id="serviceHomeBtn"
+        class="service-home-btn"
+        type="button"
+        title="返回首页"
+        aria-label="返回首页"
+      >首页</button>
       <a
         id="serviceDownloadBtn"
         class="service-download-btn"
@@ -46,7 +53,6 @@
         title="下载整个网页到本地，可离线使用"
         aria-label="下载整个网页到本地，可离线使用"
       >Download</a>
-      <div id="serviceMenuPopup" class="service-menu-popup" hidden></div>
       <span class="service-mode-text">SERVICE MODE: Not for Treatment Use</span>
       <span class="service-spacer"></span>
       <span>View: [service]</span>
@@ -62,6 +68,7 @@
   <script src="./js/tool-status-registry.js"></script>
   <script src="./js/content.js"></script>
   <script src="./js/tc-log-file-store.js"></script>
+  <script src="./js/page-modules/error-analyzer-tool.js"></script>
   <script src="./js/page-modules/tc-shift-tool.js"></script>
   <script src="./js/page-modules/patient-counter-tool.js"></script>
   <script src="./js/page-modules/tic-monitor-tool.js"></script>

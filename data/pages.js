@@ -7,6 +7,7 @@ const menuData = [
     id: "tools",
     title: "TC Logger",
     children: [
+      { id: "tool-error-analyzer", title: "Error Analyzer" },
       { id: "tool-tc-shift", title: "Scanning Magnet Shift" },
       { id: "tool-patient-counter", title: "Patient Counter" },
       { id: "tool-tic-monitor", title: "TIC Monitor" }
@@ -35,39 +36,96 @@ const pageContent = {
         content: "1. 更新 TC Logs 三个工具的部分 UI，更新病人计数器的算法方式；<br>2. 新添工具 TIC Sweep Analyzer，感谢陈龙！龙哥是超人！"
       },
       {
-        title: "新功能",
-        type: "toolLinks",
-        items: [
+        title: "常用工具",
+        type: "toolDirectory",
+        columns: [
           {
-            label: "病人计数器",
-            desc: "计算已治疗人数",
-            pageId: "tool-patient-counter"
+            title: "TC Logs",
+            items: [
+              {
+                label: "Error Analyzer",
+                desc: "筛选并整理 TC Log 报错信息",
+                pageId: "tool-error-analyzer"
+              },
+              {
+                label: "Scanning Magnet Shift",
+                desc: "Layer Shift、Offset 与趋势图",
+                pageId: "tool-tc-shift"
+              },
+              {
+                label: "Patient Counter",
+                desc: "治疗人数、Frac 与射野统计",
+                pageId: "tool-patient-counter"
+              },
+              {
+                label: "TIC Temp / Pressure",
+                desc: "TIC 温度与气压趋势",
+                pageId: "tool-tic-monitor"
+              }
+            ]
           },
           {
-            label: "TIC Sweep Analyzer",
-            desc: "绘制 pulses, channels, dCompare 分析图",
-            pageId: "daily-tic-sweep"
+            title: "Daily",
+            groups: [
+              {
+                title: "TIC Sweep",
+                items: [
+                  {
+                    label: "TIC Sweep Analyzer",
+                    desc: "Pulses、Channels 与 dCompare",
+                    pageId: "daily-tic-sweep"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            title: "杂项",
+            items: []
           }
         ]
       },
       {
-        title: "常用工具",
-        type: "toolLinks",
+        title: "Bomgar 路径",
+        type: "copyList",
         items: [
           {
-            label: "Scanning Magnet Shift 计算器",
-            desc: "Layer Shift 提取、offset 计算、绘图",
-            pageId: "tool-tc-shift"
+            label: "新 TC Logs",
+            value: "/opt/mevion/apps/2.9.1R5_PRODUCTION/logs/"
           },
           {
-            label: "TIC 温度/气压",
-            desc: "绘图 TIC Temp / Pressure 与时间关系",
-            pageId: "tool-tic-monitor"
+            label: "旧 TC Logs",
+            value: "/backup_logs/MAIN/"
           },
           {
-            label: "TIC Sweep Analyzer",
-            desc: "绘制 pulses, channels, dCompare 分析图",
-            pageId: "daily-tic-sweep"
+            label: "Daily Data",
+            value: "/home/mevion/Desktop/daily test/"
+          },
+          {
+            label: "Vacuum data",
+            value: "/backup_logs/TMUX/"
+          }
+        ]
+      },
+      {
+        title: "Notepad++ 常用关键词",
+        type: "copyList",
+        items: [
+          {
+            label: "异常治疗中断",
+            value: "abnormal termination"
+          },
+          {
+            label: "Error- 类报错（需开正则表达式）",
+            value: "ERROR-(?!4065\\b|4060\\b|46034\\b|26016\\b)\\d+"
+          },
+          {
+            label: "Left OG Disabled",
+            value: "MOTION_ERROR_GALIL_INVALID_BG_WHILE_DISABLED"
+          },
+          {
+            label: "mACP 不满足",
+            value: "mACP: Faulted"
           }
         ]
       }
@@ -86,6 +144,11 @@ const pageContent = {
         title: "常用工具",
         type: "toolLinks",
         items: [
+          {
+            label: "Error Analyzer",
+            desc: "筛选并整理 TC Log 报错信息",
+            pageId: "tool-error-analyzer"
+          },
           {
             label: "Scanning Magnet Shift 计算器",
             desc: "Layer Shift 提取、offset 计算、绘图",
@@ -151,6 +214,22 @@ const pageContent = {
         title: "工具区",
         type: "custom",
         customId: "ticSweepToolRoot"
+      }
+    ],
+    side: []
+  },
+
+  "tool-error-analyzer": {
+    hero: {
+      tag: "",
+      title: "Error Analyzer",
+      desc: "导入 TCLogger 文件，筛选并整理报错与异常中断信息。"
+    },
+    sections: [
+      {
+        title: "工具区",
+        type: "custom",
+        customId: "errorAnalyzerToolRoot"
       }
     ],
     side: []

@@ -18,8 +18,8 @@ const TIC_COLORS = {
   "DS TIC X": "#3b82f6",
   "DS TIC Y": "#f59e0b"
 };
-const TIC_CHART_SIZE = { width: 1200, height: 560 };
-const TIC_CHART_PADDING = { left: 78, right: 30, top: 30, bottom: 68 };
+const TIC_CHART_SIZE = { width: 1000, height: 460 };
+const TIC_CHART_PADDING = { left: 74, right: 24, top: 30, bottom: 62 };
 
 function updateTicMonitorToolStatus(type, message) {
   if (!window.ToolStatusRegistry || typeof window.ToolStatusRegistry.setStatus !== "function") return;
@@ -305,7 +305,7 @@ function renderTicChartPanel(kind, panelTitle, plotTitle, unit, yAxisTitle) {
         </div>
       </div>
       <div class="chart-canvas-wrap tic-chart-wrap">
-        <canvas id="tic-${kind}-canvas" data-kind="${kind}" data-unit="${unit}" data-y-axis-title="${yAxisTitle}" data-canvas-title="${panelTitle}" data-plot-title="${plotTitle}" width="1200" height="560"></canvas>
+        <canvas id="tic-${kind}-canvas" data-kind="${kind}" data-unit="${unit}" data-y-axis-title="${yAxisTitle}" data-canvas-title="${panelTitle}" data-plot-title="${plotTitle}" width="1000" height="460"></canvas>
       </div>
     </section>
   `;

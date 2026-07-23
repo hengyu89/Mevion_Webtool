@@ -1,5 +1,14 @@
 const pageDomCache = new Map();
 
+function buildToolDirectoryButtonHtml(item) {
+  return `
+    <button class="tool-directory-link" type="button" data-page-id="${item.pageId}">
+      <span class="tool-directory-link-title">${item.label}</span>
+      <span class="tool-directory-link-desc">${item.desc || ""}</span>
+    </button>
+  `;
+}
+
 function buildMainContentHtml(pageId) {
   const page = pageContent[pageId];
 
@@ -74,6 +83,62 @@ function buildMainContentHtml(pageId) {
       `;
     }
 
+    if (section.type === "toolDirectory") {
+      html += `
+        <section class="card section-card tool-directory-section">
+          <h2 class="section-title">${section.title}</h2>
+          <div class="tool-directory-grid">
+            ${(section.columns || []).map((column) => {
+              const directItems = (column.items || []).map(buildToolDirectoryButtonHtml).join("");
+              const groups = (column.groups || []).map((group) => `
+                <div class="tool-directory-group">
+                  <h4 class="tool-directory-group-title">${group.title}</h4>
+                  <div class="tool-directory-list">
+                    ${(group.items || []).map(buildToolDirectoryButtonHtml).join("")}
+                  </div>
+                </div>
+              `).join("");
+
+              return `
+                <div class="tool-directory-column">
+                  <h3 class="tool-directory-column-title">${column.title}</h3>
+                  <div class="tool-directory-column-body">
+                    ${directItems ? `<div class="tool-directory-list">${directItems}</div>` : ""}
+                    ${groups}
+                    ${!directItems && !groups ? '<div class="tool-directory-empty" aria-hidden="true"></div>' : ""}
+                  </div>
+                </div>
+              `;
+            }).join("")}
+          </div>
+        </section>
+      `;
+    }
+
+    if (section.type === "copyList") {
+      html += `
+        <section class="card section-card copy-list-section">
+          <h2 class="section-title">${section.title}</h2>
+          <div class="copy-list-scroll">
+            <div class="copy-list">
+              ${(section.items || []).map((item) => `
+                <div class="copy-list-row">
+                  <span class="copy-list-label">${item.label}</span>
+                  <code class="copy-list-value" title="${item.value}">${item.value}</code>
+                  <button
+                    class="copy-value-btn"
+                    type="button"
+                    title="复制"
+                    aria-label="复制 ${item.label}"
+                  ><span aria-hidden="true">⧉</span></button>
+                </div>
+              `).join("")}
+            </div>
+          </div>
+        </section>
+      `;
+    }
+
     if (section.type === "custom") {
       html += `
         <section class="card section-card">
@@ -127,6 +192,57 @@ function bindMainContentNavigation(mainContent) {
       }
     });
   });
+
+  mainContent.querySelectorAll(".copy-value-btn").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const row = button.closest(".copy-list-row");
+      const value = row?.querySelector(".copy-list-value")?.textContent || "";
+      const copied = await copyPlainText(value);
+      const icon = button.querySelector("span");
+
+      button.classList.toggle("copy-failed", !copied);
+      button.classList.toggle("copied", copied);
+      button.title = copied ? "已复制" : "复制失败";
+      if (icon) icon.textContent = copied ? "✓" : "!";
+
+      window.setTimeout(() => {
+        button.classList.remove("copied", "copy-failed");
+        button.title = "复制";
+        if (icon) icon.textContent = "⧉";
+      }, 1200);
+    });
+  });
+}
+
+async function copyPlainText(value) {
+  if (!value) return false;
+
+  try {
+    if (window.isSecureContext && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+      return true;
+    }
+  } catch (error) {
+    // Fall through to the offline-compatible copy path.
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  document.body.appendChild(textarea);
+  textarea.select();
+
+  let copied = false;
+  try {
+    copied = document.execCommand("copy");
+  } catch (error) {
+    copied = false;
+  }
+
+  textarea.remove();
+  return copied;
 }
 
 function bindToolStatusSwitcherNavigation(mainContent) {

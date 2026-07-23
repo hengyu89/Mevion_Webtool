@@ -339,7 +339,7 @@ function parsePatientCounterRelevantLine(line, headerIndexes, patientMap, contex
     if (!isValidRealPatientId(patientId)) return headerIndexes;
     const beamMatch = dosrecPath.match(/Beam[_-]?(\d+)/i);
     const rawBeam = beamMatch ? Number(beamMatch[1]) : NaN;
-    const beam = Number.isFinite(rawBeam) ? Math.max(1, rawBeam - 1) : "";
+    const beam = Number.isFinite(rawBeam) ? rawBeam : "";
     const fraction = Number(dosrecMatch[2]);
     const startInfo = context.patientStartById.get(patientId);
     const sessionStartInfo = context.currentPlanStartById.get(patientId) || startInfo;
@@ -571,7 +571,7 @@ function renderPatientCounterTableAndSummary() {
       <tbody>
         ${pageRows
           .map((row, index) => {
-            const beams = Array.from(row.beams || []).sort((a, b) => Number(a) - Number(b)).join(", ");
+            const beams = formatPatientBeamList(row.beams);
             return `
               <tr class="${row.isNew ? "patient-new-row" : ""}">
                 <td class="muted-cell">${start + index + 1}</td>
@@ -771,6 +771,15 @@ function formatPatientFractionRange(fractions) {
 
   ranges.push(start === previous ? String(start) : `${start}-${previous}`);
   return `Frac ${ranges.join(", ")}`;
+}
+
+function formatPatientBeamList(beams) {
+  return Array.from(beams || [])
+    .map(Number)
+    .filter((beam) => Number.isFinite(beam) && beam >= 1)
+    .sort((a, b) => a - b)
+    .map((beam) => (beam === 1 ? "Setup" : String(beam - 1)))
+    .join(", ");
 }
 
 function formatPatientElapsed(elapsedMs) {
