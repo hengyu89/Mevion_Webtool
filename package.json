@@ -1,0 +1,18 @@
+{
+  "name": "mevion-webtool",
+  "version": "2.0.1",
+  "private": true,
+  "description": "Offline browser tools for on-site log and daily data analysis.",
+  "scripts": {
+    "build:zip": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-offline-zip.ps1",
+    "check": "npm run lint",
+    "lint": "eslint \"js/**/*.js\" \"data/**/*.js\"",
+    "lint:fix": "eslint \"js/**/*.js\" \"data/**/*.js\" --fix"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.7.0",
+    "globals": "^17.7.0",
+    "prettier": "^3.9.6"
+  }
+}

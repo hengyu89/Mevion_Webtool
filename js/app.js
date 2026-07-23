@@ -1,3 +1,7 @@
+/* global findParentIdByChildId, initErrorAnalyzerToolPage, initPatientCounterToolPage */
+/* global initTcShiftToolPage, initTicMonitorToolPage, initTicSweepToolPage */
+/* global menuData, renderMainContent, renderMenu, renderSideContent */
+
 const state = {
   currentPageId: "home",
   openParentId: null,

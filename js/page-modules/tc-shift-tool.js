@@ -554,7 +554,7 @@ function parseDateTimeLocalInput(value) {
   const text = String(value || "").trim();
   if (!text) return null;
 
-  const normalized = text.replace(/[\/\.]/g, "-").replace(/T/g, " ").replace(/\s+/g, " ");
+  const normalized = text.replace(/[/.]/g, "-").replace(/T/g, " ").replace(/\s+/g, " ");
 
   let match = normalized.match(/^(\d{4})-(\d{1,2})-(\d{1,2})\s+(\d{1,2}):(\d{2})$/);
   if (match) {
@@ -587,7 +587,6 @@ function renderTcShiftTableAndSummary() {
   if (!summary || !wrap) return;
 
   const activeRows = getActiveRows();
-  const excludedRows = getExcludedRows();
   const tableRows = getVisibleTableRows();
 
   const pageSize = tcShiftToolState.pageSize;
@@ -1682,12 +1681,12 @@ function drawTcShiftChart() {
   const plotWidth = width - padding.left - padding.right;
   const plotHeight = height - padding.top - padding.bottom;
 
-  let dataY = [];
-  let dataX = [];
-  let xAxisType = "numeric";
-  let xAxisTitle = "Angle";
-  let xLabelFormatter = (v) => String(v);
-  let fixedXTicks = null;
+  let dataY;
+  let dataX;
+  let xAxisType;
+  let xAxisTitle;
+  let xLabelFormatter;
+  let fixedXTicks;
 
   if (tcShiftToolState.chartMode === "all-angle") {
     const filtered = rows.filter((row) => row.angle !== "" && row.angle !== null);

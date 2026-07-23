@@ -1,0 +1,11 @@
+# Local dependencies and generated caches
+node_modules/
+.eslintcache
+
+# Keep treatment and machine logs out of source control
+*.csv
+*.log
+
+# Operating-system files
+.DS_Store
+Thumbs.db

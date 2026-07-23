@@ -1,3 +1,5 @@
+/* global menuData */
+
 function findParentIdByChildId(childId) {
   for (const item of menuData) {
     if (item.children) {

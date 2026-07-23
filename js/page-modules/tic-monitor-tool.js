@@ -315,7 +315,7 @@ function bindTicLegendEvents(root) {
   root.querySelectorAll("input[data-tic-series]").forEach((input) => {
     input.addEventListener("change", () => {
       ticMonitorState.visible[input.dataset.ticSeries] = input.checked;
-      root.querySelectorAll(`input[data-tic-series=\"${input.dataset.ticSeries}\"]`).forEach((sameSeriesInput) => {
+      root.querySelectorAll(`input[data-tic-series="${input.dataset.ticSeries}"]`).forEach((sameSeriesInput) => {
         sameSeriesInput.checked = input.checked;
       });
       drawAllTicCharts();
@@ -544,13 +544,10 @@ function getNiceTicScale(values, options = {}) {
 
   if (max <= min) max = min + preferredStep * 4;
 
-  let span = max - min;
-  let tickCount = Math.round(span / preferredStep);
+  const tickCount = Math.round((max - min) / preferredStep);
   if (tickCount < 3) {
     min -= preferredStep;
     max += preferredStep;
-    span = max - min;
-    tickCount = Math.round(span / preferredStep);
   }
 
   const ticks = [];

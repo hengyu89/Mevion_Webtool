@@ -1,3 +1,5 @@
+/* global pageContent, setPage */
+
 const pageDomCache = new Map();
 
 function buildToolDirectoryButtonHtml(item) {
@@ -238,7 +240,7 @@ async function copyPlainText(value) {
   try {
     copied = document.execCommand("copy");
   } catch (error) {
-    copied = false;
+    // Keep the default false result when the legacy copy API is unavailable.
   }
 
   textarea.remove();
