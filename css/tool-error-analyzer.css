@@ -452,6 +452,15 @@
   line-height: 1.3;
 }
 
+.error-analyzer-note-main,
+.error-analyzer-note-axis {
+  display: block;
+}
+
+.error-analyzer-note-main + .error-analyzer-note-axis {
+  margin-top: 2px;
+}
+
 .error-analyzer-table td:nth-child(2),
 .error-analyzer-table td:nth-child(3) {
   color: #565656;

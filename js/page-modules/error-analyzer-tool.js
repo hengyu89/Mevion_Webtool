@@ -11,6 +11,10 @@ const errorAnalyzerState = {
 const ERROR_ANALYZER_INCLUDED_CODE_RE = /ERROR-(?!4065\b|4060\b|46034\b|26016\b|26015\b)\d+\b/i;
 const ERROR_ANALYZER_CLINICAL_STOP_RE = /Logging Abnormal Termination Condition:\s*.+\s+in CLINICAL\b/i;
 const ERROR_ANALYZER_SERVICE_STOP_RE = /Logging Abnormal Termination Condition:\s*.+\s+in SERVICE\b/i;
+const ERROR_ANALYZER_OPERATIONAL_STOP_RE =
+  /Logging Abnormal Termination Condition:\s*.+\s+in (?:PHYSICS|QA)\b/i;
+const ERROR_ANALYZER_HEAP_FREE_RE =
+  /^Heap Free (WARNING|CRITICAL) in RTP \(([^)]+)_heap_stats\):\s*(-?\d+(?:\.\d+)?) MB\.\s*Recommend adjustment to\s*(-?\d+(?:\.\d+)?) MB\./i;
 const ERROR_ANALYZER_GALIL_RE = /Error detected\s*=\s*MOTION_ERROR_GALIL_INVALID_BG_WHILE_DISABLED\b/i;
 const ERROR_ANALYZER_VACUUM_RE = /^(G[45])\s*\((RF|Cryostat)\)\s+(?:vacuum\s+)?pressure\s+of\s+/i;
 const ERROR_ANALYZER_RS_CV_RE = /ERROR-4603[67]\b/i;
@@ -18,9 +22,14 @@ const ERROR_ANALYZER_RS_CV_RESULT_RE =
   /^Range Shifter calibration check finished\.\s*Final result:\s*FAIL\b/i;
 const ERROR_ANALYZER_RS_PLATE_MOTION_CODE_RE = /ERROR-46018\b/i;
 const ERROR_ANALYZER_PULSE_RETRY_RE = /ERROR-46029\b/i;
-const ERROR_ANALYZER_DOSE_COMPARE_RE = /ERROR-404[5-7]\b.*?\bcharge comparison failure\b/i;
+const ERROR_ANALYZER_DOSE_COMPARE_RE =
+  /ERROR-\d+\b:\s*[A-Za-z0-9-]+\s+charge comparison (?:failure|error)\b/i;
+const ERROR_ANALYZER_DOSE_COMPARE_SUMMARY_RE =
+  /ERROR-\d+\b:\s*Charge comparison (?:failure|error)\b/i;
 const ERROR_ANALYZER_DOSE_POSITION_RE = /ERROR-4057\b.*?\bAverage error for layer\b/i;
 const ERROR_ANALYZER_SPOT_CHARGE_RE = /ERROR-4056\b.*?\bSpot charge limit error\b/i;
+const ERROR_ANALYZER_DOSE_LAYER_SHIFT_RE = /ERROR-4063\b.*?\bInitial frame shift\b/i;
+const ERROR_ANALYZER_SPOT_SIZE_RE = /\b(?:average|gross) spot size is out of tolerance\b/i;
 const ERROR_ANALYZER_DTIME_DETAIL_RE =
   /^Beam-On time of\s+\d+(?:\.\d+)?s\s+exceeds maximum of\s+\d+(?:\.\d+)?s\b/i;
 const ERROR_ANALYZER_CIG_COLLISION_RE = /^Nozzle Collision Detected\b/i;
@@ -34,6 +43,8 @@ const ERROR_ANALYZER_TIC_TEMPERATURE_RE = /ERROR-5029\b.*?\bTIC temperature spre
 const ERROR_ANALYZER_TIC_PRESSURE_RE = /ERROR-5030\b.*?\bTIC pressure spread out of tolerance\b/i;
 const ERROR_ANALYZER_TIC_ENVIRONMENT_RE =
   /ERROR-50(?:29|30)\b.*?\bTIC (?:temperature|pressure) spread out of tolerance\b/i;
+const ERROR_ANALYZER_SM_COOLING_PRESSURE_RE =
+  /ERROR-46019\b.*?\bPressure Transducer error\b/i;
 const ERROR_ANALYZER_KUKA_COMMS_UNSATISFIED_RE = /^IL_PLC_TO_KUKA_COMMS became unsatisfied\b/i;
 const ERROR_ANALYZER_KUKA_COMMS_LATCHED_RE = /^IL_PLC_TO_KUKA_COMMS became LATCHED\b/i;
 const ERROR_ANALYZER_KUKA_COMMS_SATISFIED_RE = /^IL_PLC_TO_KUKA_COMMS became satisfied\b/i;
@@ -67,17 +78,24 @@ const ERROR_ANALYZER_TERMINATION_TYPES = Object.freeze({
   DOSE_COMPARISONS: "dCompare",
   DOSE_POSITION: "dPos",
   SPOT_DOSE_LIMIT: "dCharge",
+  DOSE_LAYER_SHIFT_LIMIT: "dShift",
+  SPOT_SIZE: "dSize",
   AA_POSITION_MISMATCH: "sAAPos"
 });
 
 const ERROR_ANALYZER_KNOWN_ERROR_TYPES = [
   { label: "sRSPos", matches: (message) => ERROR_ANALYZER_RS_CV_RE.test(message) },
   { label: "sRSPos", matches: (message) => ERROR_ANALYZER_RS_PLATE_MOTION_CODE_RE.test(message) },
-  { label: "dCompare", matches: (message) => ERROR_ANALYZER_DOSE_COMPARE_RE.test(message) },
+  {
+    label: "dCompare",
+    matches: isErrorAnalyzerDoseComparisonMessage
+  },
   { label: "dPos", matches: (message) => ERROR_ANALYZER_DOSE_POSITION_RE.test(message) },
   { label: "dCharge", matches: (message) => ERROR_ANALYZER_SPOT_CHARGE_RE.test(message) },
+  { label: "dShift", matches: (message) => ERROR_ANALYZER_DOSE_LAYER_SHIFT_RE.test(message) },
   { label: "sAAErr", matches: (message) => ERROR_ANALYZER_AA_TIMEOUT_RE.test(message) },
-  { label: "dEnv", matches: (message) => ERROR_ANALYZER_TIC_ENVIRONMENT_RE.test(message) }
+  { label: "dEnv", matches: (message) => ERROR_ANALYZER_TIC_ENVIRONMENT_RE.test(message) },
+  { label: "wSMSt", matches: (message) => ERROR_ANALYZER_SM_COOLING_PRESSURE_RE.test(message) }
 ];
 
 const ERROR_ANALYZER_CORRELATIONS = [
@@ -103,7 +121,10 @@ const ERROR_ANALYZER_CORRELATIONS = [
     keepEvidenceType: true,
     matchesEvidence: (alert) => alert.ruleId === "errorCode" && ERROR_ANALYZER_RS_CV_RE.test(alert.message),
     matchesResult: (alert) => alert.ruleId === "rsCvResultEvidence",
-    getNote: () => "CV failed"
+    getNote: (evidence) => {
+      const failedPlates = getErrorAnalyzerRsCvFailedPlates(evidence);
+      return failedPlates.length > 1 ? `CV failed × ${failedPlates.length}` : "CV failed";
+    }
   },
   {
     id: "rsPlateMotion",
@@ -125,22 +146,19 @@ const ERROR_ANALYZER_CORRELATIONS = [
     id: "doseCompare",
     maxMs: 1500,
     matchesEvidence: (alert) =>
-      alert.ruleId === "errorCode" && ERROR_ANALYZER_DOSE_COMPARE_RE.test(alert.message),
+      alert.ruleId === "errorCode" && isErrorAnalyzerDoseComparisonMessage(alert.message),
     matchesResult: (alert) => isErrorAnalyzerTermination(alert, "DOSE_COMPARISONS"),
     getNote: (evidence) => getErrorAnalyzerDoseComparisonName(evidence.message) || "Dose comparison"
   },
   {
     id: "dosePosition",
     maxMs: 1500,
-  matchesEvidence: (alert) =>
-    alert.ruleId === "errorCode" && ERROR_ANALYZER_DOSE_POSITION_RE.test(alert.message),
-  matchesResult: (alert) => isErrorAnalyzerTermination(alert, "DOSE_POSITION"),
-  getLabel: () => "dPos",
-  getNote: (evidence) => {
-    const axis = getErrorAnalyzerDosAxis(evidence);
-    return axis ? `Dose position / ${axis}` : "Dose position";
-  }
-},
+    matchesEvidence: (alert) =>
+      alert.ruleId === "errorCode" && ERROR_ANALYZER_DOSE_POSITION_RE.test(alert.message),
+    matchesResult: (alert) => isErrorAnalyzerTermination(alert, "DOSE_POSITION"),
+    getLabel: () => "dPos",
+    getNote: () => "Dose position"
+  },
   {
     id: "spotChargeLimit",
     maxMs: 1500,
@@ -148,6 +166,23 @@ const ERROR_ANALYZER_CORRELATIONS = [
       alert.ruleId === "errorCode" && ERROR_ANALYZER_SPOT_CHARGE_RE.test(alert.message),
     matchesResult: (alert) => isErrorAnalyzerTermination(alert, "SPOT_DOSE_LIMIT"),
     getNote: () => "Spot charge limit"
+  },
+  {
+    id: "doseLayerShift",
+    maxMs: 1500,
+    matchesEvidence: (alert) =>
+      alert.ruleId === "errorCode" && ERROR_ANALYZER_DOSE_LAYER_SHIFT_RE.test(alert.message),
+    matchesResult: (alert) => isErrorAnalyzerTermination(alert, "DOSE_LAYER_SHIFT_LIMIT"),
+    getLabel: () => "dShift",
+    getNote: () => "Layer shift"
+  },
+  {
+    id: "spotSize",
+    maxMs: 1500,
+    matchesEvidence: (alert) => alert.ruleId === "spotSizeEvidence",
+    matchesResult: (alert) => isErrorAnalyzerTermination(alert, "SPOT_SIZE"),
+    getLabel: () => "dSize",
+    getNote: () => "Spot size"
   }
 ];
 
@@ -171,6 +206,18 @@ const ERROR_ANALYZER_RULES = [
     matches: (row) => ERROR_ANALYZER_SERVICE_STOP_RE.test(row.message)
   },
   {
+    id: "operationalStop",
+    label: "Operational",
+    level: "warning",
+    matches: (row) => ERROR_ANALYZER_OPERATIONAL_STOP_RE.test(row.message)
+  },
+  {
+    id: "heapFree",
+    label: "Heap WARN",
+    level: "warning",
+    matches: (row) => ERROR_ANALYZER_HEAP_FREE_RE.test(row.message)
+  },
+  {
     id: "rsCvResultEvidence",
     label: "RS CV result",
     level: "warning",
@@ -183,6 +230,13 @@ const ERROR_ANALYZER_RULES = [
     level: "warning",
     supportOnly: true,
     matches: (row) => ERROR_ANALYZER_DTIME_DETAIL_RE.test(row.message)
+  },
+  {
+    id: "spotSizeEvidence",
+    label: "dSize",
+    level: "warning",
+    supportOnly: true,
+    matches: (row) => ERROR_ANALYZER_SPOT_SIZE_RE.test(row.message)
   },
   {
     id: "cigCollisionEvidence",
@@ -281,10 +335,23 @@ function findErrorAnalyzerRule(message, extra = "") {
       if (ERROR_ANALYZER_SERVICE_STOP_RE.test(text)) {
         return ERROR_ANALYZER_RULE_BY_ID.get("serviceStop");
       }
+      if (ERROR_ANALYZER_OPERATIONAL_STOP_RE.test(text)) {
+        return ERROR_ANALYZER_RULE_BY_ID.get("operationalStop");
+      }
+      break;
+    case "H":
+      if (ERROR_ANALYZER_HEAP_FREE_RE.test(text)) {
+        return ERROR_ANALYZER_RULE_BY_ID.get("heapFree");
+      }
       break;
     case "R":
       if (ERROR_ANALYZER_RS_CV_RESULT_RE.test(text)) {
         return ERROR_ANALYZER_RULE_BY_ID.get("rsCvResultEvidence");
+      }
+      break;
+    case "T":
+      if (ERROR_ANALYZER_SPOT_SIZE_RE.test(text)) {
+        return ERROR_ANALYZER_RULE_BY_ID.get("spotSizeEvidence");
       }
       break;
     case "B":
@@ -500,13 +567,20 @@ async function parseErrorAnalyzerFiles(files, onProgress) {
   const correlatedAlerts = mergeErrorAnalyzerAdaptiveApertureAlerts(
     mergeErrorAnalyzerAdaptiveApertureEvidence(
       mergeErrorAnalyzerCorrelatedAlerts(
-        mergeErrorAnalyzerDosPairAlerts(mergeErrorAnalyzerVacuumAlerts(chronologicalAlerts))
+        mergeErrorAnalyzerRsCvEvidenceAlerts(
+          mergeErrorAnalyzerDoseComparisonEvidence(
+            mergeErrorAnalyzerDosPairAlerts(mergeErrorAnalyzerVacuumAlerts(chronologicalAlerts))
+          )
+        )
       )
     )
   );
-  result.alerts = mergeErrorAnalyzerContinuousEnvironmentAlerts(
+  const displayAlerts = mergeErrorAnalyzerContinuousEnvironmentAlerts(
     mergeErrorAnalyzerPlateFaultBursts(mergeErrorAnalyzerKukaCommsAlerts(correlatedAlerts))
   ).filter((alert) => !alert.supportOnly);
+  result.alerts = mergeErrorAnalyzerRepeatedDisplayAlerts(
+    mergeErrorAnalyzerHeapFreeAlerts(displayAlerts)
+  );
   Object.keys(result.counts).forEach((key) => {
     result.counts[key] = result.alerts.filter((alert) => alert.ruleId === key).length;
   });
@@ -561,6 +635,7 @@ function parseErrorAnalyzerCsvText(text, sourceFile, result, alertMap) {
 function makeErrorAnalyzerAlert(row, rule) {
   const vacuumMatch = row.message.match(ERROR_ANALYZER_VACUUM_RE);
   const type = getErrorAnalyzerType(row, rule);
+  const dosAxes = getErrorAnalyzerDosAxes(row);
   return {
     ruleId: rule.id,
     ruleLabel: type.label,
@@ -576,20 +651,28 @@ function makeErrorAnalyzerAlert(row, rule) {
     sourceFile: row.sourceFile,
     rowIndex: row.rowIndex,
     vacuumSensor: vacuumMatch ? `${vacuumMatch[1].toUpperCase()} (${vacuumMatch[2]})` : "",
-    note: getErrorAnalyzerNote(row, rule),
+    note: appendErrorAnalyzerDosAxes(getErrorAnalyzerNote(row, rule), { dosAxes }),
     supportOnly: Boolean(rule.supportOnly),
-    dosAxes: getErrorAnalyzerDosAxis(row) ? [getErrorAnalyzerDosAxis(row)] : [],
+    dosAxes,
     relatedRows: 1
   };
 }
 
 function getErrorAnalyzerType(row, rule) {
-  if (rule.id === "clinicalStop" || rule.id === "serviceStop") {
+  if (isErrorAnalyzerTerminationRuleId(rule.id)) {
     const condition = getErrorAnalyzerTerminationCondition(row.message);
     const interlock = getErrorAnalyzerInterlockByCondition(condition);
     return {
       label: interlock?.code || ERROR_ANALYZER_TERMINATION_TYPES[condition] || condition || rule.label,
       level: rule.level
+    };
+  }
+
+  if (rule.id === "heapFree") {
+    const details = getErrorAnalyzerHeapFreeDetails(row.message);
+    return {
+      label: details.severity === "CRITICAL" ? "Heap CRIT" : "Heap WARN",
+      level: details.severity === "CRITICAL" ? "critical" : "warning"
     };
   }
 
@@ -608,7 +691,11 @@ function getErrorAnalyzerType(row, rule) {
 function getErrorAnalyzerNote(row, rule) {
   if (rule.id === "galilDisabled") return "OG disabled";
   if (rule.id === "kukaCommsUnsatisfied") return "Kuka Offline";
-  if (rule.id === "clinicalStop" || rule.id === "serviceStop") {
+  if (rule.id === "heapFree") {
+    const details = getErrorAnalyzerHeapFreeDetails(row.message);
+    return `${details.processLabel || "RTP"} Heap Free`;
+  }
+  if (isErrorAnalyzerTerminationRuleId(rule.id)) {
     const condition = getErrorAnalyzerTerminationCondition(row.message);
     const interlock = getErrorAnalyzerInterlockByCondition(condition);
     return interlock?.guideName || interlock?.name || formatErrorAnalyzerCondition(condition);
@@ -617,7 +704,7 @@ function getErrorAnalyzerNote(row, rule) {
   if (rule.id === "errorCode" && ERROR_ANALYZER_RS_PLATE_MOTION_CODE_RE.test(row.message)) {
     return "Range shifter plate motion";
   }
-  if (rule.id === "errorCode" && ERROR_ANALYZER_DOSE_COMPARE_RE.test(row.message)) {
+  if (rule.id === "errorCode" && isErrorAnalyzerDoseComparisonMessage(row.message)) {
     return getErrorAnalyzerDoseComparisonName(row.message) || "Dose comparison";
   }
   if (rule.id === "errorCode" && ERROR_ANALYZER_SPOT_CHARGE_RE.test(row.message)) {
@@ -628,6 +715,9 @@ function getErrorAnalyzerNote(row, rule) {
   }
   if (rule.id === "errorCode" && ERROR_ANALYZER_TIC_PRESSURE_RE.test(row.message)) {
     return "TIC pressure spread";
+  }
+  if (rule.id === "errorCode" && ERROR_ANALYZER_SM_COOLING_PRESSURE_RE.test(row.message)) {
+    return "SM Cooling";
   }
   if (rule.id === "errorCode" && getErrorAnalyzerDosAxis(row)) return getErrorAnalyzerDosAxis(row);
   if (rule.id === "vacuum" && /^G4\s*\(Cryostat\)/i.test(row.message)) return "Cryostat Vacuum";
@@ -656,6 +746,125 @@ function mergeErrorAnalyzerVacuumAlerts(alerts) {
     previous.note = mergeErrorAnalyzerNotes(previous.note, alert.note);
     previous.relatedRows += alert.relatedRows;
   });
+  return merged;
+}
+
+function mergeErrorAnalyzerRsCvEvidenceAlerts(alerts) {
+  const merged = [];
+
+  for (let index = 0; index < alerts.length;) {
+    const first = cloneErrorAnalyzerAlert(alerts[index]);
+    if (first.ruleId !== "errorCode" || !ERROR_ANALYZER_RS_CV_RE.test(first.message)) {
+      merged.push(first);
+      index += 1;
+      continue;
+    }
+
+    const group = [first];
+    let cursor = index + 1;
+    while (cursor < alerts.length) {
+      const candidate = alerts[cursor];
+      const previous = group[group.length - 1];
+      const elapsed =
+        parseErrorAnalyzerTimestampMs(candidate.timestamp) -
+        parseErrorAnalyzerTimestampMs(previous.timestamp);
+      if (
+        candidate.sourceFile !== first.sourceFile ||
+        candidate.ruleId !== "errorCode" ||
+        !ERROR_ANALYZER_RS_CV_RE.test(candidate.message) ||
+        !Number.isFinite(elapsed) ||
+        elapsed < 0 ||
+        elapsed > 1000
+      ) {
+        break;
+      }
+      group.push(cloneErrorAnalyzerAlert(candidate));
+      cursor += 1;
+    }
+
+    if (group.length === 1) {
+      merged.push(first);
+    } else {
+      merged.push(combineErrorAnalyzerRsCvEvidenceGroup(group));
+    }
+    index = cursor;
+  }
+
+  return merged;
+}
+
+function combineErrorAnalyzerRsCvEvidenceGroup(group) {
+  const first = group[0];
+  const messages = group.flatMap((alert) => alert.messages || [alert.message]).filter(Boolean);
+  const failedPlates = getErrorAnalyzerRsCvFailedPlates(messages);
+
+  return {
+    ...first,
+    ruleLabel: "sRSPos",
+    typeLabels: ["sRSPos"],
+    message: messages.join("\n"),
+    messages,
+    note: `CV failed × ${failedPlates.length || group.length}`,
+    incidentKind: "rsCalibrationEvidenceBurst",
+    relatedRows: group.reduce((total, alert) => total + Number(alert.relatedRows || 1), 0)
+  };
+}
+
+function mergeErrorAnalyzerDoseComparisonEvidence(alerts) {
+  const merged = [];
+
+  alerts.forEach((originalAlert) => {
+    const alert = cloneErrorAnalyzerAlert(originalAlert);
+    if (
+      alert.ruleId !== "errorCode" ||
+      !ERROR_ANALYZER_DOSE_COMPARE_SUMMARY_RE.test(alert.message)
+    ) {
+      merged.push(alert);
+      return;
+    }
+
+    const alertTime = parseErrorAnalyzerTimestampMs(alert.timestamp);
+    const pulse = getErrorAnalyzerPulseNumber(alert.message);
+    let detailIndex = -1;
+    for (let index = merged.length - 1; index >= 0; index -= 1) {
+      const detail = merged[index];
+      const elapsed = alertTime - parseErrorAnalyzerTimestampMs(detail.timestamp);
+      if (Number.isFinite(elapsed) && elapsed > 1500) break;
+      if (
+        detail.sourceFile === alert.sourceFile &&
+        detail.ruleId === "errorCode" &&
+        Number.isFinite(elapsed) &&
+        elapsed >= 0 &&
+        ERROR_ANALYZER_DOSE_COMPARE_RE.test(detail.message) &&
+        (!pulse || getErrorAnalyzerPulseNumber(detail.message) === pulse)
+      ) {
+        detailIndex = index;
+        break;
+      }
+    }
+
+    if (detailIndex < 0) {
+      merged.push(alert);
+      return;
+    }
+
+    const detail = merged[detailIndex];
+    (alert.messages || [alert.message]).forEach((message) =>
+      appendErrorAnalyzerMessage(detail, message)
+    );
+    const sourceLabels = Array.from(
+      new Set([getErrorAnalyzerSourceLabel(detail), getErrorAnalyzerSourceLabel(alert)].filter(Boolean))
+    );
+    detail.source = sourceLabels.join("; ");
+    detail.subsystem = "";
+    detail.dosAxes = Array.from(new Set([...(detail.dosAxes || []), ...(alert.dosAxes || [])]));
+    detail.note = appendErrorAnalyzerDosAxes(
+      getErrorAnalyzerDoseComparisonName(detail.message) || detail.note || "Dose comparison",
+      detail
+    );
+    detail.relatedRows += Number(alert.relatedRows || 1);
+  });
+
   return merged;
 }
 
@@ -704,15 +913,24 @@ function mergeErrorAnalyzerCorrelatedAlerts(alerts) {
 
 function combineErrorAnalyzerAlerts(evidence, result, correlation) {
   const base = correlation.keepEvidenceType ? evidence : result;
+  const evidenceMessages = evidence.messages || [evidence.message];
+  const resultMessages = result.messages || [result.message];
+  const orderedMessages =
+    correlation.id === "rsCalibrationVerification"
+      ? [
+          ...evidenceMessages.slice(0, 2),
+          ...resultMessages,
+          ...evidenceMessages.slice(2)
+        ]
+      : [...evidenceMessages, ...resultMessages];
   const messages = Array.from(
-    new Set(
-      [...(evidence.messages || [evidence.message]), ...(result.messages || [result.message])].filter(Boolean)
-    )
+    new Set(orderedMessages.filter(Boolean))
   );
   const sourceLabels = Array.from(
     new Set([getErrorAnalyzerSourceLabel(evidence), getErrorAnalyzerSourceLabel(result)].filter(Boolean))
   );
   const dosAxes = Array.from(new Set([...(evidence.dosAxes || []), ...(result.dosAxes || [])]));
+  const note = appendErrorAnalyzerDosAxes(correlation.getNote(evidence, result), { dosAxes });
 
   return {
     ...base,
@@ -725,7 +943,7 @@ function combineErrorAnalyzerAlerts(evidence, result, correlation) {
     subsystem: "",
     message: messages.join("\n"),
     messages,
-    note: correlation.getNote(evidence, result),
+    note,
     incidentKind: correlation.id,
     supportOnly: false,
     dosAxes,
@@ -927,7 +1145,9 @@ function mergeErrorAnalyzerKukaCommsAlerts(alerts) {
     }
 
     const latched = related.find(({ alert }) => alert.ruleId === "kukaCommsLatchedEvidence")?.alert;
-    const evidence = [latched, finalUnlatched]
+    const startEvidence = latched || incident;
+    const endEvidence = finalUnlatched || satisfied;
+    const evidence = [startEvidence, endEvidence]
       .filter(Boolean)
       .sort((a, b) => String(a.timestamp || "").localeCompare(String(b.timestamp || "")));
     const messages = Array.from(
@@ -1089,6 +1309,155 @@ function mergeErrorAnalyzerContinuousEnvironmentAlerts(alerts) {
     );
 }
 
+function mergeErrorAnalyzerHeapFreeAlerts(alerts) {
+  const groups = [];
+  const currentGroups = new Map();
+
+  alerts.forEach((alert, index) => {
+    if (alert.ruleId !== "heapFree") return;
+    const details = getErrorAnalyzerHeapFreeDetails(alert.message);
+    const key = details.processKey || "rtp";
+    let currentGroup = currentGroups.get(key) || [];
+    const previous = currentGroup[currentGroup.length - 1];
+    const sameDate =
+      !previous ||
+      splitErrorAnalyzerTimestamp(previous.alert.timestamp).date ===
+        splitErrorAnalyzerTimestamp(alert.timestamp).date;
+    const elapsed = previous
+      ? parseErrorAnalyzerTimestampMs(alert.timestamp) -
+        parseErrorAnalyzerTimestampMs(previous.alert.timestamp)
+      : 0;
+
+    if (
+      previous &&
+      (previous.details.severity !== details.severity ||
+        !sameDate ||
+        !Number.isFinite(elapsed) ||
+        elapsed < 0 ||
+        elapsed > 30 * 60 * 1000)
+    ) {
+      groups.push(currentGroup);
+      currentGroup = [];
+    }
+    currentGroup.push({ alert, details, index });
+    currentGroups.set(key, currentGroup);
+  });
+  currentGroups.forEach((group) => {
+    if (group.length) groups.push(group);
+  });
+
+  const replacements = new Map();
+  const skippedIndexes = new Set();
+  groups
+    .filter((group) => group.length >= 2)
+    .forEach((group) => {
+      replacements.set(group[0].index, combineErrorAnalyzerHeapFreeRun(group));
+      group.slice(1).forEach((item) => skippedIndexes.add(item.index));
+    });
+
+  return alerts
+    .map((alert, index) => replacements.get(index) || (skippedIndexes.has(index) ? null : alert))
+    .filter(Boolean)
+    .sort(
+      (left, right) =>
+        parseErrorAnalyzerTimestampMs(left.timestamp) - parseErrorAnalyzerTimestampMs(right.timestamp)
+    );
+}
+
+function combineErrorAnalyzerHeapFreeRun(group) {
+  const first = group[0].alert;
+  const last = group[group.length - 1].alert;
+  const details = group[0].details;
+  const messages = group.flatMap(({ alert }) => alert.messages || [alert.message]).filter(Boolean);
+  const isCritical = details.severity === "CRITICAL";
+
+  return {
+    ...first,
+    ruleLabel: isCritical ? "Heap CRIT" : "Heap WARN",
+    typeLabels: [isCritical ? "Heap CRIT" : "Heap WARN"],
+    level: isCritical ? "critical" : "warning",
+    endTimestamp: last.timestamp,
+    message: messages.join("\n"),
+    messages,
+    note: `${details.processLabel || "RTP"} Heap Free × ${messages.length}`,
+    incidentKind: isCritical ? "heapFreeCriticalRun" : "heapFreeWarningRun",
+    relatedRows: group.reduce(
+      (total, { alert }) => total + Number(alert.relatedRows || 1),
+      0
+    )
+  };
+}
+
+function mergeErrorAnalyzerRepeatedDisplayAlerts(alerts) {
+  const merged = [];
+
+  for (let index = 0; index < alerts.length;) {
+    const first = alerts[index];
+    const kind = getErrorAnalyzerRepeatedDisplayKind(first);
+    if (!kind) {
+      merged.push(first);
+      index += 1;
+      continue;
+    }
+
+    const group = [first];
+    let cursor = index + 1;
+    while (
+      cursor < alerts.length &&
+      getErrorAnalyzerRepeatedDisplayKind(alerts[cursor]) === kind
+    ) {
+      group.push(alerts[cursor]);
+      cursor += 1;
+    }
+
+    if (group.length < 4) {
+      merged.push(...group);
+    } else {
+      merged.push(combineErrorAnalyzerRepeatedDisplayRun(group, kind));
+    }
+    index = cursor;
+  }
+
+  return merged;
+}
+
+function getErrorAnalyzerRepeatedDisplayKind(alert) {
+  if (
+    alert?.ruleId === "serviceStop" &&
+    getErrorAnalyzerTerminationCondition(alert.message) === "BEAM_KEY"
+  ) {
+    return "serviceBeamKey";
+  }
+  if (
+    alert?.ruleId === "errorCode" &&
+    (alert.messages || [alert.message]).some((message) =>
+      ERROR_ANALYZER_SM_COOLING_PRESSURE_RE.test(message)
+    )
+  ) {
+    return "smCooling";
+  }
+  return "";
+}
+
+function combineErrorAnalyzerRepeatedDisplayRun(group, kind) {
+  const first = group[0];
+  const last = group[group.length - 1];
+  const messages = group.flatMap((alert) => alert.messages || [alert.message]).filter(Boolean);
+  const isBeamKey = kind === "serviceBeamKey";
+
+  return {
+    ...first,
+    ruleLabel: isBeamKey ? "hBKey" : "wSMSt",
+    typeLabels: [isBeamKey ? "hBKey" : "wSMSt"],
+    endTimestamp: last.timestamp,
+    message: messages.join("\n"),
+    messages,
+    note: isBeamKey ? `Beam key × ${messages.length}` : `SM Cooling × ${messages.length}`,
+    incidentKind: isBeamKey ? "serviceBeamKeyRun" : "smCoolingRun",
+    relatedRows: group.reduce((total, alert) => total + Number(alert.relatedRows || 1), 0)
+  };
+}
+
 function getErrorAnalyzerTicEnvironmentKind(alert) {
   if (alert?.ruleId !== "errorCode") return "";
   const messages = alert.messages || [alert.message];
@@ -1160,7 +1529,7 @@ function mergeErrorAnalyzerDosPairAlerts(alerts) {
     candidate.source = sourceLabels.join("; ");
     candidate.subsystem = "";
     candidate.dosAxes = combinedAxes;
-    candidate.note = combinedAxes.join(" / ");
+    candidate.note = appendErrorAnalyzerDosAxes(candidate.note, { dosAxes: combinedAxes });
     candidate.relatedRows += alert.relatedRows;
   });
 
@@ -1175,25 +1544,76 @@ function cloneErrorAnalyzerAlert(alert) {
   };
 }
 
-function getErrorAnalyzerDosAxis(value) {
+function getErrorAnalyzerDosAxes(value) {
   const sourceText =
     typeof value === "string" ? value : [value?.source, value?.subsystem].filter(Boolean).join(" ");
-  if (/\bDOSY(?:_|\b)/i.test(sourceText)) return "DOS Y";
-  if (/\bDOSX(?:_|\b)/i.test(sourceText)) return "DOS X";
-  return "";
+  const axes = Array.from(value?.dosAxes || []);
+  if (/\bDOSY(?:_|\b)/i.test(sourceText)) axes.push("DOS Y");
+  if (/\bDOSX(?:_|\b)/i.test(sourceText)) axes.push("DOS X");
+  return Array.from(new Set(axes));
+}
+
+function getErrorAnalyzerDosAxis(value) {
+  return getErrorAnalyzerDosAxes(value)[0] || "";
+}
+
+function appendErrorAnalyzerDosAxes(note, value) {
+  const base = String(note || "").trim();
+  const baseUpper = base.toUpperCase();
+  const missingAxes = getErrorAnalyzerDosAxes(value).filter((axis) => !baseUpper.includes(axis));
+  return [base, ...missingAxes].filter(Boolean).join(" / ");
 }
 
 function getErrorAnalyzerCode(message) {
   return String(message || "").match(/ERROR-(\d+)\b/i)?.[1] || "";
 }
 
+function isErrorAnalyzerTerminationRuleId(ruleId) {
+  return ["clinicalStop", "serviceStop", "operationalStop"].includes(ruleId);
+}
+
 function getErrorAnalyzerTerminationCondition(message) {
   return (
     String(message || "")
-      .match(/Logging Abnormal Termination Condition:\s*(.+?)\s+in\s+(?:CLINICAL|SERVICE)\b/i)?.[1]
+      .match(
+        /Logging Abnormal Termination Condition:\s*(.+?)\s+in\s+(?:CLINICAL|SERVICE|PHYSICS|QA)\b/i
+      )?.[1]
       ?.trim()
       ?.toUpperCase() || ""
   );
+}
+
+function getErrorAnalyzerHeapFreeDetails(value) {
+  const message = typeof value === "string" ? value : value?.message;
+  const match = String(message || "").match(ERROR_ANALYZER_HEAP_FREE_RE);
+  if (!match) {
+    return {
+      severity: "",
+      processKey: "",
+      processLabel: "",
+      freeMb: "",
+      recommendedMb: ""
+    };
+  }
+
+  const processKey = match[2].toLowerCase();
+  const processName = processKey.replace(/_manager$/i, "");
+  const processLabel = processName
+    .split("_")
+    .filter(Boolean)
+    .map((part) =>
+      part.length <= 4
+        ? part.toUpperCase()
+        : part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()
+    )
+    .join(" ");
+  return {
+    severity: match[1].toUpperCase(),
+    processKey,
+    processLabel,
+    freeMb: match[3],
+    recommendedMb: match[4]
+  };
 }
 
 function normalizeErrorAnalyzerInterlockKey(value) {
@@ -1247,7 +1667,7 @@ function getErrorAnalyzerInterlockByCondition(condition) {
 function getErrorAnalyzerInterlockForAlert(alert) {
   const byLabel = getErrorAnalyzerInterlockByCode(alert?.ruleLabel);
   if (byLabel) return byLabel;
-  if (alert?.ruleId === "clinicalStop" || alert?.ruleId === "serviceStop") {
+  if (isErrorAnalyzerTerminationRuleId(alert?.ruleId)) {
     return getErrorAnalyzerInterlockByCondition(getErrorAnalyzerTerminationCondition(alert.message));
   }
   return null;
@@ -1259,15 +1679,42 @@ function getErrorAnalyzerInterlockExplanation(entry) {
 
 function isErrorAnalyzerTermination(alert, condition) {
   return (
-    (alert.ruleId === "clinicalStop" || alert.ruleId === "serviceStop") &&
+    isErrorAnalyzerTerminationRuleId(alert.ruleId) &&
     getErrorAnalyzerTerminationCondition(alert.message) === condition
+  );
+}
+
+function getErrorAnalyzerRsCvFailedPlates(value) {
+  const messages = Array.isArray(value)
+    ? value
+    : value?.messages || [typeof value === "string" ? value : value?.message];
+  return Array.from(
+    new Set(
+      messages
+        .filter((message) => ERROR_ANALYZER_RS_CV_RE.test(message))
+        .map((message) => String(message || "").match(/\bPlate\s+(\d+)\b/i)?.[1])
+        .filter(Boolean)
+    )
+  ).sort((left, right) => Number(left) - Number(right));
+}
+
+function isErrorAnalyzerDoseComparisonMessage(message) {
+  return (
+    ERROR_ANALYZER_DOSE_COMPARE_RE.test(message) ||
+    ERROR_ANALYZER_DOSE_COMPARE_SUMMARY_RE.test(message)
   );
 }
 
 function getErrorAnalyzerDoseComparisonName(message) {
   return (
-    String(message || "").match(/ERROR-404[5-7]:\s*([A-Za-z0-9-]+)\s+charge comparison failure/i)?.[1] || ""
+    String(message || "").match(
+      /ERROR-\d+\b:\s*([A-Za-z0-9-]+)\s+charge comparison (?:failure|error)\b/i
+    )?.[1] || ""
   );
+}
+
+function getErrorAnalyzerPulseNumber(message) {
+  return String(message || "").match(/\bon pulse\s+(\d+)\b/i)?.[1] || "";
 }
 
 function normalizeErrorAnalyzerMessage(message) {
@@ -1621,13 +2068,44 @@ function renderErrorAnalyzerTypes(alert) {
 }
 
 function renderErrorAnalyzerNote(alert) {
-  const summary = getErrorAnalyzerNoteSummary(alert);
+  const { main, axis } = getErrorAnalyzerNoteDisplayParts(alert);
   const explanation = getErrorAnalyzerInterlockExplanation(getErrorAnalyzerInterlockForAlert(alert));
   const title = explanation ? ` title="${escapeErrorAnalyzerHtml(explanation)}"` : "";
-  return `<div class="error-analyzer-note-summary"${title}>${escapeErrorAnalyzerHtml(summary || "-")}</div>`;
+  const content = [
+    main
+      ? `<span class="error-analyzer-note-main">${escapeErrorAnalyzerHtml(main)}</span>`
+      : "",
+    axis
+      ? `<span class="error-analyzer-note-axis">${escapeErrorAnalyzerHtml(axis)}</span>`
+      : ""
+  ]
+    .filter(Boolean)
+    .join("");
+  return `<div class="error-analyzer-note-summary"${title}>${content || "-"}</div>`;
+}
+
+function getErrorAnalyzerNoteDisplayParts(alert) {
+  const summary = getErrorAnalyzerNoteSummary(alert);
+  const axes = getErrorAnalyzerDosAxes(alert);
+  if (!axes.length) return { main: summary, axis: "" };
+
+  const axisLabels = new Set(axes.map((axis) => axis.toUpperCase()));
+  const main = String(summary || "")
+    .split(/\s*\/\s*/)
+    .filter((part) => !axisLabels.has(part.toUpperCase()))
+    .join(" / ");
+  return { main, axis: axes.join(" / ") };
 }
 
 function getErrorAnalyzerNoteSummary(alert) {
+  return appendErrorAnalyzerDosAxes(getErrorAnalyzerBaseNoteSummary(alert), alert);
+}
+
+function getErrorAnalyzerBaseNoteSummary(alert) {
+  if (alert.incidentKind === "serviceBeamKeyRun" || alert.incidentKind === "smCoolingRun") {
+    return String(alert.note || "");
+  }
+
   if (alert.incidentKind === "cigCollision") {
     return "Nozzle collision";
   }
@@ -1640,7 +2118,11 @@ function getErrorAnalyzerNoteSummary(alert) {
     return "Spot charge limit";
   }
 
-  if (alert.incidentKind === "doseCompare" || ERROR_ANALYZER_DOSE_COMPARE_RE.test(alert.message)) {
+  if (alert.incidentKind === "doseLayerShift" || alert.incidentKind === "spotSize") {
+    return String(alert.note || "");
+  }
+
+  if (alert.incidentKind === "doseCompare" || isErrorAnalyzerDoseComparisonMessage(alert.message)) {
     const comparisonName = getErrorAnalyzerDoseComparisonName(alert.message);
     if (comparisonName) return comparisonName;
   }
@@ -1649,7 +2131,7 @@ function getErrorAnalyzerNoteSummary(alert) {
     return String(alert.note || "AA Pos Mismatch");
   }
 
-  if (alert.ruleId === "clinicalStop" || alert.ruleId === "serviceStop") {
+  if (isErrorAnalyzerTerminationRuleId(alert.ruleId)) {
     const condition = getErrorAnalyzerTerminationCondition(alert.message);
     if (condition) return formatErrorAnalyzerCondition(condition);
   }
@@ -1673,8 +2155,9 @@ function getErrorAnalyzerNoteSummary(alert) {
   }
 
   if (alert.incidentKind === "rsCalibrationVerification" || ERROR_ANALYZER_RS_CV_RE.test(alert.message)) {
-    const match = String(alert.message || "").match(/Plate\s+(\d+)/i);
-    return `CV failed${match ? ` - Plate ${match[1]}` : ""}`;
+    const failedPlates = getErrorAnalyzerRsCvFailedPlates(alert);
+    if (failedPlates.length > 1) return `CV failed × ${failedPlates.length}`;
+    return `CV failed${failedPlates.length ? ` - Plate ${failedPlates[0]}` : ""}`;
   }
 
   return String(alert.note || "");
@@ -1749,7 +2232,12 @@ function highlightErrorAnalyzerMessage(message, alert) {
   ) {
     return highlightErrorAnalyzerRsCvMessage(html);
   }
-  if (ERROR_ANALYZER_DOSE_COMPARE_RE.test(message)) return highlightErrorAnalyzerDoseCompareMessage(html);
+  if (isErrorAnalyzerDoseComparisonMessage(message)) {
+    return highlightErrorAnalyzerDoseCompareMessage(html);
+  }
+  if (ERROR_ANALYZER_SM_COOLING_PRESSURE_RE.test(message)) {
+    return highlightErrorAnalyzerSmCoolingPressureMessage(html);
+  }
   if (ERROR_ANALYZER_DOSE_POSITION_RE.test(message)) {
     return highlightErrorAnalyzerDosePositionMessage(html);
   }
@@ -1760,7 +2248,10 @@ function highlightErrorAnalyzerMessage(message, alert) {
   if (ERROR_ANALYZER_RS_PLATE_MOTION_CODE_RE.test(message)) {
     return highlightErrorAnalyzerRangeShifterMotionMessage(html);
   }
-  if (alert.ruleId === "clinicalStop" || alert.ruleId === "serviceStop") {
+  if (ERROR_ANALYZER_HEAP_FREE_RE.test(message)) {
+    return highlightErrorAnalyzerHeapFreeMessage(html);
+  }
+  if (isErrorAnalyzerTerminationRuleId(alert.ruleId)) {
     return highlightErrorAnalyzerTerminationMessage(html, alert.level);
   }
   return html;
@@ -1816,11 +2307,37 @@ function highlightErrorAnalyzerRangeShifterMotionMessage(html) {
 }
 
 function highlightErrorAnalyzerTerminationMessage(html, level) {
-  const tokenClass = level === "service" ? "error-analyzer-service-token" : "error-analyzer-critical-token";
+  const tokenClass =
+    level === "service"
+      ? "error-analyzer-service-token"
+      : level === "warning"
+        ? "error-analyzer-warning-token"
+        : "error-analyzer-critical-token";
   return html.replace(
-    /(Logging Abnormal Termination Condition:\s*)(.+?)(\s+in\s+(?:CLINICAL|SERVICE)\b)/i,
+    /(Logging Abnormal Termination Condition:\s*)(.+?)(\s+in\s+(?:CLINICAL|SERVICE|PHYSICS|QA)\b)/i,
     `$1<span class="${tokenClass}">$2</span>$3`
   );
+}
+
+function highlightErrorAnalyzerHeapFreeMessage(html) {
+  return html
+    .replace(
+      /\b(WARNING|CRITICAL)\b/i,
+      (severity) =>
+        `<span class="error-analyzer-${severity.toLowerCase()}-token">${severity}</span>`
+    )
+    .replace(
+      /(\([^)]+_heap_stats\))/i,
+      '<span class="error-analyzer-evidence-label">$1</span>'
+    )
+    .replace(
+      /(:\s*)(-?\d+(?:\.\d+)?\s+MB)/i,
+      '$1<span class="error-analyzer-measured-value">$2</span>'
+    )
+    .replace(
+      /(Recommend adjustment to\s+)(-?\d+(?:\.\d+)?\s+MB)/i,
+      '$1<span class="error-analyzer-threshold-value">$2</span>'
+    );
 }
 
 function highlightErrorAnalyzerRsCvMessage(html) {
@@ -1832,10 +2349,22 @@ function highlightErrorAnalyzerRsCvMessage(html) {
 function highlightErrorAnalyzerDoseCompareMessage(html) {
   return html
     .replace(
-      /(ERROR-404[5-7]:\s*)([A-Za-z0-9-]+)(?=\s+charge comparison failure)/i,
+      /(ERROR-\d+:\s*)([A-Za-z0-9-]+)(?=\s+charge comparison (?:failure|error))/i,
       '$1<span class="error-analyzer-evidence-label">$2</span>'
     )
-    .replace(/\b\d+(?:\.\d+)?\s+pC\b/gi, '<span class="error-analyzer-measured-value">$&</span>');
+    .replace(/\b\d+(?:\.\d+)?\s*pC\b/gi, '<span class="error-analyzer-measured-value">$&</span>');
+}
+
+function highlightErrorAnalyzerSmCoolingPressureMessage(html) {
+  return html
+    .replace(
+      /(\bvalue\s*=\s*)(-?\d+(?:\.\d+)?\s*PSI)/i,
+      '$1<span class="error-analyzer-measured-value">$2</span>'
+    )
+    .replace(
+      /(\blimits\s*)(\[\s*-?\d+(?:\.\d+)?\s*PSI\s*,\s*-?\d+(?:\.\d+)?\s*PSI\s*\])/i,
+      '$1<span class="error-analyzer-threshold-value">$2</span>'
+    );
 }
 
 function highlightErrorAnalyzerDosePositionMessage(html) {

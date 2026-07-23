@@ -15,7 +15,7 @@ const context = vm.createContext({
   window: {}
 });
 vm.runInContext(
-  `${interlockCatalogSource}\n${analyzerSource}\nglobalThis.errorAnalyzerTestApi = { parseErrorAnalyzerFiles, highlightErrorAnalyzerMessage, filterErrorAnalyzerAlertsByLevel, getErrorAnalyzerLevelStatistics, getErrorAnalyzerNoteSummary, renderErrorAnalyzerMessages };`,
+  `${interlockCatalogSource}\n${analyzerSource}\nglobalThis.errorAnalyzerTestApi = { parseErrorAnalyzerFiles, highlightErrorAnalyzerMessage, filterErrorAnalyzerAlertsByLevel, getErrorAnalyzerLevelStatistics, getErrorAnalyzerNoteSummary, renderErrorAnalyzerNote, renderErrorAnalyzerMessages };`,
   context
 );
 
@@ -89,6 +89,14 @@ test("merges ERROR-4057 with its dose-position termination and emphasizes its va
   assert.equal(result.alerts[0].level, "critical");
   assert.equal(result.alerts[0].incidentKind, "dosePosition");
   assert.equal(result.alerts[0].note, "Dose position / DOS Y");
+  assert.equal(
+    context.errorAnalyzerTestApi.getErrorAnalyzerNoteSummary(result.alerts[0]),
+    "Dose position / DOS Y"
+  );
+  assert.match(
+    context.errorAnalyzerTestApi.renderErrorAnalyzerNote(result.alerts[0]),
+    /error-analyzer-note-main">Dose position<\/span><span class="error-analyzer-note-axis">DOS Y<\/span>/
+  );
   assert.equal(result.alerts[0].messages.length, 2);
 
   const html = context.errorAnalyzerTestApi.highlightErrorAnalyzerMessage(
@@ -208,6 +216,44 @@ test("classifies ERROR-46037 as RS CV and links a delayed final FAIL", async () 
   assert.match(result.alerts[0].message, /Final result: FAIL/);
 });
 
+test("groups a multi-plate RS CV failure and keeps the final FAIL in the three-line preview", async () => {
+  const plateRows = Array.from({ length: 13 }, (_, index) => {
+    const plate = index + 2;
+    const milliseconds = String(268 + index * 2).padStart(3, "0");
+    return `2026-07-17 19:00:07.${milliseconds},WARNING,XYZ_SW,XYZ_PCM,DEVICE_ERROR,2026-07-17 11:00:07.${milliseconds},"ERROR-46036: Plate ${plate} did NOT reach target for IN {Pot Expected: 9.432V} {Pot Actuals: 0.745V, 0.781V} :FAIL",XYZ_Controller.cpp`;
+  });
+  const csv = makeCsv([
+    ...plateRows,
+    '2026-07-17 19:00:07.301,INFO,XYZ_SW,XYZ_PCM,NO_ERROR,2026-07-17 11:00:07.301,"Range Shifter calibration check finished. Final result: FAIL",XYZ_Controller.cpp'
+  ]);
+
+  const result = await context.errorAnalyzerTestApi.parseErrorAnalyzerFiles([
+    mockFile("TCLogger.csv", csv)
+  ]);
+
+  assert.equal(result.alerts.length, 1);
+  assert.equal(result.alerts[0].ruleLabel, "sRSPos");
+  assert.equal(result.alerts[0].incidentKind, "rsCalibrationVerification");
+  assert.equal(result.alerts[0].note, "CV failed × 13");
+  assert.equal(
+    context.errorAnalyzerTestApi.getErrorAnalyzerNoteSummary(result.alerts[0]),
+    "CV failed × 13"
+  );
+  assert.equal(result.alerts[0].messages.length, 14);
+  assert.match(result.alerts[0].messages[0], /Plate 2/);
+  assert.match(result.alerts[0].messages[1], /Plate 3/);
+  assert.match(result.alerts[0].messages[2], /Final result: FAIL/);
+  assert.match(result.alerts[0].messages[3], /Plate 4/);
+
+  const html = context.errorAnalyzerTestApi.renderErrorAnalyzerMessages(result.alerts[0]);
+  const preview = html.split('<div class="error-analyzer-message-extra"')[0];
+  assert.match(preview, /Plate 2/);
+  assert.match(preview, /Plate 3/);
+  assert.match(preview, /Final result: <span class="error-analyzer-warning-token">FAIL<\/span>/);
+  assert.doesNotMatch(preview, /Plate 4/);
+  assert.match(html, /data-message-count="14"/);
+});
+
 test("merges pulse retry with a clinical XYZ termination", async () => {
   const csv = makeCsv([
     '2026-07-06 17:34:58.712,WARNING,XYZ_SW,XYZ_PCM,RANGE_ERROR,2026-07-06 09:34:58.712,"ERROR-46029: Pulse Retry limit error (40 retries) on pulse 1003 [Interrupt]",XYZ_Controller.cpp',
@@ -240,6 +286,35 @@ test("keeps service-mode pulse retry visible and gray", async () => {
   assert.equal(result.alerts[0].messages.length, 2);
 });
 
+test("merges a PHYSICS pulse retry termination as sXYZLd", async () => {
+  const csv = makeCsv([
+    '2025-01-03 10:42:10.601,WARNING,XYZ_SW,XYZ_PCM,DEVICE_ERROR,2025-01-03 02:42:10.601,"ERROR-46029: Pulse Retry limit error (40 retries) on pulse 1 [Interrupt]",XYZ_Controller.cpp',
+    '2025-01-03 10:42:10.891,INFO,MCC,STATE_MANAGER,NO_ERROR,2025-01-03 02:42:10.891,"Logging Abnormal Termination Condition: XYZ_SUBSYSTEM_LOADED in PHYSICS",WorkflowManager.cpp'
+  ]);
+
+  const result = await context.errorAnalyzerTestApi.parseErrorAnalyzerFiles([
+    mockFile("TCLogger.csv", csv)
+  ]);
+
+  assert.equal(result.alerts.length, 1);
+  assert.equal(result.alerts[0].ruleLabel, "sXYZLd");
+  assert.equal(result.alerts[0].level, "warning");
+  assert.equal(result.alerts[0].incidentKind, "pulseRetry");
+  assert.equal(result.alerts[0].note, "Pulse retry limit");
+  assert.equal(result.alerts[0].messages.length, 2);
+  assert.match(result.alerts[0].messages[0], /ERROR-46029/);
+  assert.match(result.alerts[0].messages[1], /XYZ_SUBSYSTEM_LOADED in PHYSICS/);
+
+  const highlighted = context.errorAnalyzerTestApi.highlightErrorAnalyzerMessage(
+    result.alerts[0].messages[1],
+    result.alerts[0]
+  );
+  assert.match(
+    highlighted,
+    /error-analyzer-warning-token">XYZ_SUBSYSTEM_LOADED<\/span> in PHYSICS/
+  );
+});
+
 test("keeps standalone service-mode terminations visible", async () => {
   const csv = makeCsv([
     '2026-07-06 23:40:00.000,INFO,MCC,STATE_MANAGER,NO_ERROR,2026-07-06 15:40:00.000,"Logging Abnormal Termination Condition: BEAM_KEY in SERVICE",WorkflowManager.cpp'
@@ -251,6 +326,127 @@ test("keeps standalone service-mode terminations visible", async () => {
   assert.equal(result.alerts[0].ruleLabel, "hBKey");
   assert.equal(result.alerts[0].level, "service");
   assert.equal(result.alerts[0].note, "Beam Enable Key");
+});
+
+test("folds consecutive service Beam key events and starts a new group after another alert", async () => {
+  const firstCsv = makeCsv([
+    '2026-07-11 16:21:38.957,INFO,MCC,STATE_MANAGER,NO_ERROR,2026-07-11 08:21:38.957,"Logging Abnormal Termination Condition: BEAM_KEY in SERVICE",WorkflowManager.cpp',
+    '2026-07-11 16:30:10.837,INFO,MCC,STATE_MANAGER,NO_ERROR,2026-07-11 08:30:10.837,"Logging Abnormal Termination Condition: BEAM_KEY in SERVICE",WorkflowManager.cpp'
+  ]);
+  const secondCsv = makeCsv([
+    '2026-07-11 16:32:16.316,INFO,MCC,STATE_MANAGER,NO_ERROR,2026-07-11 08:32:16.316,"Logging Abnormal Termination Condition: BEAM_KEY in SERVICE",WorkflowManager.cpp',
+    '2026-07-11 16:34:00.716,INFO,MCC,STATE_MANAGER,NO_ERROR,2026-07-11 08:34:00.716,"Logging Abnormal Termination Condition: BEAM_KEY in SERVICE",WorkflowManager.cpp',
+    '2026-07-11 19:47:59.009,WARNING,MCC,GO,DEVICE_ERROR,2026-07-11 11:47:59.009,"GO: Ctrl: Error detected = MOTION_ERROR_GALIL_INVALID_BG_WHILE_DISABLED (88).",Galil.cpp',
+    '2026-07-11 19:50:56.854,INFO,MCC,STATE_MANAGER,NO_ERROR,2026-07-11 11:50:56.854,"Logging Abnormal Termination Condition: BEAM_KEY in SERVICE",WorkflowManager.cpp',
+    '2026-07-11 19:54:23.033,INFO,MCC,STATE_MANAGER,NO_ERROR,2026-07-11 11:54:23.033,"Logging Abnormal Termination Condition: BEAM_KEY in SERVICE",WorkflowManager.cpp',
+    '2026-07-11 19:58:27.813,INFO,MCC,STATE_MANAGER,NO_ERROR,2026-07-11 11:58:27.813,"Logging Abnormal Termination Condition: BEAM_KEY in SERVICE",WorkflowManager.cpp',
+    '2026-07-11 20:01:50.692,INFO,MCC,STATE_MANAGER,NO_ERROR,2026-07-11 12:01:50.692,"Logging Abnormal Termination Condition: BEAM_KEY in SERVICE",WorkflowManager.cpp'
+  ]);
+
+  const result = await context.errorAnalyzerTestApi.parseErrorAnalyzerFiles([
+    mockFile("TCLogger-1.csv", firstCsv),
+    mockFile("TCLogger-2.csv", secondCsv)
+  ]);
+
+  assert.equal(result.alerts.length, 3);
+  assert.equal(result.alerts[0].incidentKind, "serviceBeamKeyRun");
+  assert.equal(result.alerts[0].note, "Beam key × 4");
+  assert.equal(result.alerts[0].timestamp, "2026-07-11 16:21:38.957");
+  assert.equal(result.alerts[0].endTimestamp, "2026-07-11 16:34:00.716");
+  assert.equal(result.alerts[0].messages.length, 4);
+  assert.equal(result.alerts[1].ruleLabel, "Galil Disabled");
+  assert.equal(result.alerts[2].incidentKind, "serviceBeamKeyRun");
+  assert.equal(result.alerts[2].note, "Beam key × 4");
+  assert.match(
+    context.errorAnalyzerTestApi.renderErrorAnalyzerMessages(result.alerts[0]),
+    /data-message-count="4"/
+  );
+});
+
+test("folds consecutive ERROR-46019 reports into an SM cooling incident", async () => {
+  const csv = makeCsv([
+    '2026-07-11 22:58:04.548,WARNING,XYZ_SW,XYZ_PCM,DEVICE_ERROR,2026-07-11 14:58:04.548,"ERROR-46019: Pressure Transducer error on pulse 24750, value = 19.9988 PSI, limits [20.0003 PSI, 29.9997 PSI] [Interrupt]",XYZ_Controller.cpp',
+    '2026-07-11 22:58:04.629,INFO,MCC,null,NO_ERROR,2026-07-11 14:58:04.629,"IL_SCANNING_MAGNET_COOLING became LATCHED. (Type 2)",interlock_manager.cpp',
+    '2026-07-11 22:58:34.550,WARNING,XYZ_SW,XYZ_PCM,DEVICE_ERROR,2026-07-11 14:58:34.550,"ERROR-46019: Pressure Transducer error on pulse 24750, value = 19.8889 PSI, limits [20.0003 PSI, 29.9997 PSI] [Interrupt]",XYZ_Controller.cpp',
+    '2026-07-11 22:59:04.518,WARNING,XYZ_SW,XYZ_PCM,DEVICE_ERROR,2026-07-11 14:59:04.518,"ERROR-46019: Pressure Transducer error on pulse 24750, value = 19.8187 PSI, limits [20.0003 PSI, 29.9997 PSI] [Interrupt]",XYZ_Controller.cpp',
+    '2026-07-11 22:59:34.522,WARNING,XYZ_SW,XYZ_PCM,DEVICE_ERROR,2026-07-11 14:59:34.522,"ERROR-46019: Pressure Transducer error on pulse 24750, value = 19.7195 PSI, limits [20.0003 PSI, 29.9997 PSI] [Interrupt]",XYZ_Controller.cpp',
+    '2026-07-11 23:49:20.198,WARNING,XYZ_SW,XYZ_PCM,DEVICE_ERROR,2026-07-11 15:49:20.198,"ERROR-46019: Pressure Transducer error on pulse 24750, value = 19.9988 PSI, limits [20.0003 PSI, 29.9997 PSI] [Interrupt]",XYZ_Controller.cpp'
+  ]);
+
+  const result = await context.errorAnalyzerTestApi.parseErrorAnalyzerFiles([mockFile("TCLogger.csv", csv)]);
+
+  assert.equal(result.alerts.length, 1);
+  assert.equal(result.alerts[0].ruleLabel, "wSMSt");
+  assert.equal(result.alerts[0].incidentKind, "smCoolingRun");
+  assert.equal(result.alerts[0].note, "SM Cooling × 5");
+  assert.equal(result.alerts[0].timestamp, "2026-07-11 22:58:04.548");
+  assert.equal(result.alerts[0].endTimestamp, "2026-07-11 23:49:20.198");
+  assert.equal(result.alerts[0].messages.length, 5);
+  assert.equal(
+    context.errorAnalyzerTestApi.getErrorAnalyzerNoteSummary(result.alerts[0]),
+    "SM Cooling × 5"
+  );
+  assert.match(
+    context.errorAnalyzerTestApi.renderErrorAnalyzerMessages(result.alerts[0]),
+    /data-message-count="5"/
+  );
+
+  const highlighted = context.errorAnalyzerTestApi.highlightErrorAnalyzerMessage(
+    result.alerts[0].messages[0],
+    result.alerts[0]
+  );
+  assert.match(highlighted, /error-analyzer-measured-value">19\.9988 PSI<\/span>/);
+  assert.match(
+    highlighted,
+    /error-analyzer-threshold-value">\[20\.0003 PSI, 29\.9997 PSI\]<\/span>/
+  );
+});
+
+test("monitors and folds Heap Free warnings while keeping critical alerts red", async () => {
+  const warningRows = Array.from(
+    { length: 4 },
+    (_, index) =>
+      `2025-01-03 15:09:${String(7 + index * 11).padStart(2, "0")}.291,WARNING,MCC,null,TASK_ERROR,2025-01-03 07:09:00.000,"Heap Free WARNING in RTP (cim_manager_heap_stats): 6.033066 MB. Recommend adjustment to 155.969994 MB.",heap_util.h`
+  );
+  const csv = makeCsv([
+    ...warningRows,
+    '2025-01-03 15:10:00.000,CRITICAL,MCC,null,TASK_ERROR,2025-01-03 07:10:00.000,"Heap Free CRITICAL in RTP (cim_manager_heap_stats): 3.125 MB. Recommend adjustment to 155.969994 MB.",heap_util.h'
+  ]);
+
+  const result = await context.errorAnalyzerTestApi.parseErrorAnalyzerFiles([
+    mockFile("TCLogger.csv", csv)
+  ]);
+
+  assert.equal(result.alerts.length, 2);
+  assert.equal(result.alerts[0].ruleLabel, "Heap WARN");
+  assert.equal(result.alerts[0].level, "warning");
+  assert.equal(result.alerts[0].note, "CIM Heap Free × 4");
+  assert.equal(result.alerts[0].incidentKind, "heapFreeWarningRun");
+  assert.equal(result.alerts[0].messages.length, 4);
+  assert.equal(result.alerts[0].endTimestamp, "2025-01-03 15:09:40.291");
+  assert.match(
+    context.errorAnalyzerTestApi.renderErrorAnalyzerMessages(result.alerts[0]),
+    /data-message-count="4"/
+  );
+
+  assert.equal(result.alerts[1].ruleLabel, "Heap CRIT");
+  assert.equal(result.alerts[1].level, "critical");
+  assert.equal(result.alerts[1].note, "CIM Heap Free");
+
+  const highlighted = context.errorAnalyzerTestApi.highlightErrorAnalyzerMessage(
+    result.alerts[1].message,
+    result.alerts[1]
+  );
+  assert.match(highlighted, /error-analyzer-critical-token">CRITICAL<\/span>/);
+  assert.match(
+    highlighted,
+    /error-analyzer-evidence-label">\(cim_manager_heap_stats\)<\/span>/
+  );
+  assert.match(highlighted, /error-analyzer-measured-value">3\.125 MB<\/span>/);
+  assert.match(
+    highlighted,
+    /error-analyzer-threshold-value">155\.969994 MB<\/span>/
+  );
 });
 
 test("groups a Kuka communications outage through recovery and final clear", async () => {
@@ -292,6 +488,29 @@ test("waits for recovery before accepting the final Kuka communications clear", 
   assert.equal(result.alerts[0].endTimestamp, "2026-07-21 21:26:57.004");
   assert.equal(result.alerts[0].messages.filter((message) => /UN-LATCHED/.test(message)).length, 1);
   assert.equal(result.alerts[0].messages.filter((message) => /became LATCHED/.test(message)).length, 1);
+});
+
+test("uses unsatisfied and satisfied as Kuka outage boundary fallbacks", async () => {
+  const csv = makeCsv([
+    '2026-07-05 09:16:14.776,INFO,MCC,TREATMENT_SPACE,NO_ERROR,2026-07-05 01:16:14.776,"IL_PLC_TO_KUKA_COMMS became unsatisfied (KRC4 mode). CIM PCM Online=FALSE, Kuka Online=FALSE",treatment_space_control.cpp',
+    '2026-07-05 09:16:14.791,INFO,MCC,null,NO_ERROR,2026-07-05 01:16:14.791,"IL_PLC_TO_KUKA_COMMS became LATCHED. (Type 2)",interlock_manager.cpp',
+    '2026-07-05 09:17:42.781,INFO,MCC,TREATMENT_SPACE,NO_ERROR,2026-07-05 01:17:42.781,"IL_PLC_TO_KUKA_COMMS became satisfied (KRC4 mode).",treatment_space_control.cpp',
+    '2026-07-05 09:37:50.511,INFO,MCC,TREATMENT_SPACE,NO_ERROR,2026-07-05 01:37:50.511,"IL_PLC_TO_KUKA_COMMS became unsatisfied (KRC4 mode). CIM PCM Online=FALSE, Kuka Online=FALSE",treatment_space_control.cpp',
+    '2026-07-05 09:39:08.301,INFO,MCC,TREATMENT_SPACE,NO_ERROR,2026-07-05 01:39:08.301,"IL_PLC_TO_KUKA_COMMS became satisfied (KRC4 mode).",treatment_space_control.cpp',
+    '2026-07-05 09:42:09.310,INFO,MCC,null,NO_ERROR,2026-07-05 01:42:09.310,"IL_PLC_TO_KUKA_COMMS became UN-LATCHED",interlock_manager.cpp'
+  ]);
+
+  const result = await context.errorAnalyzerTestApi.parseErrorAnalyzerFiles([mockFile("TCLogger.csv", csv)]);
+
+  assert.equal(result.alerts.length, 2);
+  assert.equal(result.alerts[0].timestamp, "2026-07-05 09:16:14.791");
+  assert.equal(result.alerts[0].endTimestamp, "2026-07-05 09:17:42.781");
+  assert.match(result.alerts[0].messages[0], /became LATCHED/);
+  assert.match(result.alerts[0].messages[1], /became satisfied/);
+  assert.equal(result.alerts[1].timestamp, "2026-07-05 09:37:50.511");
+  assert.equal(result.alerts[1].endTimestamp, "2026-07-05 09:42:09.310");
+  assert.match(result.alerts[1].messages[0], /became unsatisfied/);
+  assert.match(result.alerts[1].messages[1], /became UN-LATCHED/);
 });
 
 test("loads the complete 37022R13 catalog and SAF19-JA4 descriptions", () => {
@@ -345,6 +564,10 @@ test("merges matching DOS Y and DOS X reports into one event", async () => {
   assert.equal(result.alerts[0].ruleLabel, "ERROR-4055");
   assert.equal(result.alerts[0].note, "DOS Y / DOS X");
   assert.deepEqual(Array.from(result.alerts[0].dosAxes), ["DOS Y", "DOS X"]);
+  assert.match(
+    context.errorAnalyzerTestApi.renderErrorAnalyzerNote(result.alerts[0]),
+    /error-analyzer-note-summary"><span class="error-analyzer-note-axis">DOS Y \/ DOS X<\/span><\/div>/
+  );
   assert.match(result.alerts[0].source, /DOSY_SW \/ DOSY_PCM/);
   assert.match(result.alerts[0].source, /DOSX_SW \/ DOSX_PCM/);
 });
@@ -362,7 +585,15 @@ test("merges dCompare evidence with its clinical termination and highlights char
   assert.equal(result.alerts.length, 1);
   assert.equal(result.alerts[0].ruleLabel, "dCompare");
   assert.equal(result.alerts[0].incidentKind, "doseCompare");
-  assert.equal(result.alerts[0].note, "Doseplane-to-US-TIC");
+  assert.equal(result.alerts[0].note, "Doseplane-to-US-TIC / DOS X");
+  assert.equal(
+    context.errorAnalyzerTestApi.getErrorAnalyzerNoteSummary(result.alerts[0]),
+    "Doseplane-to-US-TIC / DOS X"
+  );
+  assert.match(
+    context.errorAnalyzerTestApi.renderErrorAnalyzerNote(result.alerts[0]),
+    /error-analyzer-note-main">Doseplane-to-US-TIC<\/span><span class="error-analyzer-note-axis">DOS X<\/span>/
+  );
   assert.equal(result.alerts[0].messages.length, 2);
 
   const html = context.errorAnalyzerTestApi.highlightErrorAnalyzerMessage(evidence, result.alerts[0]);
@@ -383,7 +614,43 @@ test("merges dCompare evidence with its service termination and keeps it gray", 
   assert.equal(result.alerts.length, 1);
   assert.equal(result.alerts[0].ruleLabel, "dCompare");
   assert.equal(result.alerts[0].level, "service");
+  assert.equal(result.alerts[0].note, "Doseplane-to-Integrator / DOS Y");
   assert.equal(result.alerts[0].messages.length, 2);
+});
+
+test("merges Doseplane-to-Doseplane detail, summary, and service termination as dCompare", async () => {
+  const detail =
+    "ERROR-46020: Doseplane-to-Doseplane charge comparison error on pulse 10589: Doseplane1: 2.70003pC, Doseplane2: 4.70703pC< Tol: 2pC [Interrupt]";
+  const csv = makeCsv([
+    `2026-07-12 14:37:49.338,WARNING,XYZ_SW,XYZ_PCM,DEVICE_ERROR,2026-07-12 06:37:49.338,"${detail}",XYZ_Controller.cpp`,
+    '2026-07-12 14:37:49.340,WARNING,XYZ_SW,XYZ_PCM,DEVICE_ERROR,2026-07-12 06:37:49.340,"ERROR-46026: Charge comparison error on pulse 10589 [Interrupt]",XYZ_Controller.cpp',
+    '2026-07-12 14:37:49.604,INFO,MCC,STATE_MANAGER,NO_ERROR,2026-07-12 06:37:49.604,"Logging Abnormal Termination Condition: DOSE_COMPARISONS in SERVICE",WorkflowManager.cpp'
+  ]);
+
+  const result = await context.errorAnalyzerTestApi.parseErrorAnalyzerFiles([
+    mockFile("TCLogger.csv", csv)
+  ]);
+
+  assert.equal(result.alerts.length, 1);
+  assert.equal(result.alerts[0].ruleLabel, "dCompare");
+  assert.equal(result.alerts[0].level, "service");
+  assert.equal(result.alerts[0].incidentKind, "doseCompare");
+  assert.equal(result.alerts[0].note, "Doseplane-to-Doseplane");
+  assert.equal(result.alerts[0].messages.length, 3);
+  assert.match(result.alerts[0].messages[0], /ERROR-46020/);
+  assert.match(result.alerts[0].messages[1], /ERROR-46026/);
+  assert.match(result.alerts[0].messages[2], /DOSE_COMPARISONS in SERVICE/);
+
+  const highlighted = context.errorAnalyzerTestApi.highlightErrorAnalyzerMessage(
+    detail,
+    result.alerts[0]
+  );
+  assert.match(
+    highlighted,
+    /error-analyzer-evidence-label">Doseplane-to-Doseplane<\/span>/
+  );
+  assert.equal((highlighted.match(/error-analyzer-measured-value/g) || []).length, 3);
+  assert.match(highlighted, /error-analyzer-measured-value">2pC<\/span>/);
 });
 
 test("merges spot charge evidence into dCharge and emphasizes diagnostic values", async () => {
@@ -399,7 +666,11 @@ test("merges spot charge evidence into dCharge and emphasizes diagnostic values"
   assert.equal(result.alerts[0].ruleLabel, "dCharge");
   assert.equal(result.alerts[0].level, "critical");
   assert.equal(result.alerts[0].incidentKind, "spotChargeLimit");
-  assert.equal(result.alerts[0].note, "Spot charge limit");
+  assert.equal(result.alerts[0].note, "Spot charge limit / DOS Y");
+  assert.equal(
+    context.errorAnalyzerTestApi.getErrorAnalyzerNoteSummary(result.alerts[0]),
+    "Spot charge limit / DOS Y"
+  );
   assert.equal(result.alerts[0].messages.length, 2);
 
   const html = context.errorAnalyzerTestApi.highlightErrorAnalyzerMessage(
@@ -409,6 +680,44 @@ test("merges spot charge evidence into dCharge and emphasizes diagnostic values"
   assert.match(html, /error-analyzer-evidence-label">Spot charge limit<\/span>/);
   assert.equal((html.match(/error-analyzer-measured-value/g) || []).length, 4);
   assert.match(html, /error-analyzer-measured-value">\(2% or 4 pC\)<\/span>/);
+});
+
+test("labels a layer-shift termination with its DOS axis", async () => {
+  const csv = makeCsv([
+    '2025-09-24 11:27:52.439,WARNING,DOSY_SW,DOSY_PCM,RANGE_ERROR,2025-09-24 03:27:52.439,"ERROR-4063: Initial frame shift of -2.03504mm on layer 0 is outside tolerance window of [-2, 2]",DOS_Controller.cpp',
+    '2025-09-24 11:27:52.624,INFO,MCC,STATE_MANAGER,NO_ERROR,2025-09-24 03:27:52.624,"Logging Abnormal Termination Condition: DOSE_LAYER_SHIFT_LIMIT in CLINICAL",WorkflowManager.cpp'
+  ]);
+
+  const result = await context.errorAnalyzerTestApi.parseErrorAnalyzerFiles([mockFile("TCLogger.csv", csv)]);
+
+  assert.equal(result.alerts.length, 1);
+  assert.equal(result.alerts[0].ruleLabel, "dShift");
+  assert.equal(result.alerts[0].incidentKind, "doseLayerShift");
+  assert.equal(result.alerts[0].note, "Layer shift / DOS Y");
+  assert.equal(
+    context.errorAnalyzerTestApi.getErrorAnalyzerNoteSummary(result.alerts[0]),
+    "Layer shift / DOS Y"
+  );
+  assert.equal(result.alerts[0].messages.length, 2);
+});
+
+test("labels a spot-size termination with its DOS axis", async () => {
+  const csv = makeCsv([
+    '2025-09-24 12:09:07.363,WARNING,DOSY_SW,DOSY_PCM,PROGRAM_FLOW,2025-09-24 04:09:07.363,"The average spot size is out of tolerance. US spot size: 2.61446 mm, US Target: 1.8 mm, DS spot size: 2.76109 mm, DS Target: 2.3 mm, Tolerance: 0.8 mm",DOS_Controller.cpp',
+    '2025-09-24 12:09:07.580,INFO,MCC,STATE_MANAGER,NO_ERROR,2025-09-24 04:09:07.580,"Logging Abnormal Termination Condition: SPOT_SIZE in CLINICAL",WorkflowManager.cpp'
+  ]);
+
+  const result = await context.errorAnalyzerTestApi.parseErrorAnalyzerFiles([mockFile("TCLogger.csv", csv)]);
+
+  assert.equal(result.alerts.length, 1);
+  assert.equal(result.alerts[0].ruleLabel, "dSize");
+  assert.equal(result.alerts[0].incidentKind, "spotSize");
+  assert.equal(result.alerts[0].note, "Spot size / DOS Y");
+  assert.equal(
+    context.errorAnalyzerTestApi.getErrorAnalyzerNoteSummary(result.alerts[0]),
+    "Spot size / DOS Y"
+  );
+  assert.equal(result.alerts[0].messages.length, 2);
 });
 
 test("uses immediate nozzle collision evidence to classify unknown clinical stops", async () => {
