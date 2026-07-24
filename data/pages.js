@@ -105,46 +105,50 @@ const pageContent = {
         ]
       },
       {
-        title: "Bomgar 路径",
-        type: "copyList",
-        items: [
+        title: "常用关键词",
+        type: "copyGroups",
+        groups: [
           {
-            label: "新 TC Logs",
-            value: "/opt/mevion/apps/2.9.1R5_PRODUCTION/logs/"
+            title: "Bomgar 路径",
+            items: [
+              {
+                label: "新 TC Logs",
+                value: "/opt/mevion/apps/2.9.1R5_PRODUCTION/logs/"
+              },
+              {
+                label: "旧 TC Logs",
+                value: "/backup_logs/MAIN/"
+              },
+              {
+                label: "Daily Data",
+                value: "/home/mevion/Desktop/daily test/"
+              },
+              {
+                label: "Vacuum data",
+                value: "/backup_logs/TMUX/"
+              }
+            ]
           },
           {
-            label: "旧 TC Logs",
-            value: "/backup_logs/MAIN/"
-          },
-          {
-            label: "Daily Data",
-            value: "/home/mevion/Desktop/daily test/"
-          },
-          {
-            label: "Vacuum data",
-            value: "/backup_logs/TMUX/"
-          }
-        ]
-      },
-      {
-        title: "Notepad++ 常用关键词",
-        type: "copyList",
-        items: [
-          {
-            label: "异常治疗中断",
-            value: "abnormal termination"
-          },
-          {
-            label: "Error- 类报错（需开正则表达式）",
-            value: "ERROR-(?!4065\\b|4060\\b|46034\\b|26016\\b|26015\\b)\\d+"
-          },
-          {
-            label: "Left OG Disabled",
-            value: "MOTION_ERROR_GALIL_INVALID_BG_WHILE_DISABLED"
-          },
-          {
-            label: "mACP 不满足",
-            value: "mACP: Faulted"
+            title: "Notepad++ 搜索",
+            items: [
+              {
+                label: "异常治疗中断",
+                value: "abnormal termination"
+              },
+              {
+                label: "Error- 类报错（需开正则表达式）",
+                value: "ERROR-(?!4065\\b|4060\\b|46034\\b|26016\\b|26015\\b)\\d+"
+              },
+              {
+                label: "Left OG Disabled",
+                value: "MOTION_ERROR_GALIL_INVALID_BG_WHILE_DISABLED"
+              },
+              {
+                label: "mACP 不满足",
+                value: "mACP: Faulted"
+              }
+            ]
           }
         ]
       }

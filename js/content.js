@@ -15,6 +15,27 @@ function buildToolDirectoryButtonHtml(item) {
   `;
 }
 
+function buildCopyListHtml(items) {
+  return `
+    <div class="copy-list-scroll">
+      <div class="copy-list">
+        ${(items || []).map((item) => `
+          <div class="copy-list-row">
+            <span class="copy-list-label">${item.label}</span>
+            <code class="copy-list-value" title="${item.value}">${item.value}</code>
+            <button
+              class="copy-value-btn"
+              type="button"
+              title="复制"
+              aria-label="复制 ${item.label}"
+            ><span aria-hidden="true">⧉</span></button>
+          </div>
+        `).join("")}
+      </div>
+    </div>
+  `;
+}
+
 function buildUpdateHistoryHtml(history) {
   if (!Array.isArray(history) || !history.length) return "";
   return `
@@ -156,21 +177,22 @@ function buildMainContentHtml(pageId) {
       html += `
         <section class="card section-card copy-list-section">
           <h2 class="section-title">${section.title}</h2>
-          <div class="copy-list-scroll">
-            <div class="copy-list">
-              ${(section.items || []).map((item) => `
-                <div class="copy-list-row">
-                  <span class="copy-list-label">${item.label}</span>
-                  <code class="copy-list-value" title="${item.value}">${item.value}</code>
-                  <button
-                    class="copy-value-btn"
-                    type="button"
-                    title="复制"
-                    aria-label="复制 ${item.label}"
-                  ><span aria-hidden="true">⧉</span></button>
-                </div>
-              `).join("")}
-            </div>
+          ${buildCopyListHtml(section.items)}
+        </section>
+      `;
+    }
+
+    if (section.type === "copyGroups") {
+      html += `
+        <section class="card section-card copy-groups-section">
+          <h2 class="section-title">${section.title}</h2>
+          <div class="copy-groups-stack">
+            ${(section.groups || []).map((group) => `
+              <section class="copy-group-panel">
+                <h3 class="copy-group-title">${group.title}</h3>
+                ${buildCopyListHtml(group.items)}
+              </section>
+            `).join("")}
           </div>
         </section>
       `;
