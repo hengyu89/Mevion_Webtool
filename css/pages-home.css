@@ -380,6 +380,11 @@
   --tool-accent-bg: #e7e1f0;
 }
 
+.tool-directory-tone-no-scanning {
+  --tool-accent: #346f78;
+  --tool-accent-bg: #dcebed;
+}
+
 .tool-directory-group {
   position: relative;
   margin-top: 6px;

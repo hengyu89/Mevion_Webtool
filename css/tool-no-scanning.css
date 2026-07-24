@@ -1,0 +1,53 @@
+/* No Scanning Treatment Record trend analyzer. */
+
+.no-scanning-tool {
+  width: 100%;
+}
+
+.no-scanning-status.done {
+  color: var(--green);
+  font-weight: 800;
+}
+
+.no-scanning-status.error {
+  color: var(--red);
+  font-weight: 800;
+}
+
+.no-scanning-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0;
+}
+
+.no-scanning-charts {
+  display: grid;
+  gap: 12px;
+}
+
+.no-scanning-chart-card {
+  width: min(100%, 780px);
+  padding: 8px;
+  overflow-x: auto;
+  background: #efefef;
+}
+
+.no-scanning-chart-card canvas {
+  display: block;
+  width: 760px;
+  height: 600px;
+  max-width: 100%;
+  background: #f4f4f4;
+  cursor: default;
+}
+
+.no-scanning-empty {
+  padding: 10px;
+}
+
+@media (max-width: 900px) {
+  .no-scanning-chart-card canvas {
+    min-width: 740px;
+  }
+}

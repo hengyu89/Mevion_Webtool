@@ -17,7 +17,8 @@ const menuData = [
     id: "daily-beam",
     title: "Daily Beam",
     children: [
-      { id: "daily-tic-sweep", title: "TIC Sweep Analyzer" }
+      { id: "daily-tic-sweep", title: "TIC Sweep Analyzer" },
+      { id: "daily-no-scanning", title: "No Scanning Analyzer" }
     ]
   }
 ];
@@ -34,7 +35,7 @@ const pageContent = {
         title: "更新内容 v.2.1.1 — 2026/7/24",
         type: "text",
         content:
-          "1. 首页 UI 更新；<br>2. 在<strong>首页</strong>添加 Bomgar 和 Notepad++ 的常用搜索关键词，按<strong>右侧复制图标</strong>可快捷复制；<br>3. 添加常用工具 Error Analyzer，可筛选绝大多数 TC Logs 报错（如 Heap Free、Kuka Offline 等）。",
+          "1. 首页 UI 更新；<br>2. 在<strong>首页</strong>添加 Bomgar 和 Notepad++ 的常用搜索关键词，按<strong>右侧复制图标</strong>可快捷复制；<br>3. 添加常用工具 Error Analyzer，可筛选绝大多数 TC Logs 报错（如 Heap Free、Kuka Offline 等）；<br>4. 添加常用工具 No Scanning Analyzer，可绘制 Position 与 Sigma 图表，用于趋势分析。",
         history: [
           {
             version: "v2.0.1",
@@ -93,6 +94,18 @@ const pageContent = {
                     pageId: "daily-tic-sweep",
                     icon: "∿",
                     tone: "daily"
+                  }
+                ]
+              },
+              {
+                title: "No Scanning",
+                items: [
+                  {
+                    label: "No Scanning Analyzer",
+                    desc: "Position 与 Sigma 趋势分析",
+                    pageId: "daily-no-scanning",
+                    icon: "◎",
+                    tone: "no-scanning"
                   }
                 ]
               }
@@ -205,9 +218,9 @@ const pageContent = {
         type: "toolLinks",
         items: [
           {
-            label: "TIC Sweep Analyzer",
-            desc: "TIC Sweep 可视化分析",
-            pageId: "daily-tic-sweep"
+            label: "No Scanning Analyzer",
+            desc: "Position 与 Sigma 趋势分析",
+            pageId: "daily-no-scanning"
           }
         ]
       },
@@ -219,6 +232,11 @@ const pageContent = {
             label: "TIC Sweep Analyzer",
             desc: "TIC Sweep 可视化分析",
             pageId: "daily-tic-sweep"
+          },
+          {
+            label: "No Scanning Analyzer",
+            desc: "Position 与 Sigma 趋势分析",
+            pageId: "daily-no-scanning"
           }
         ]
       }
@@ -237,6 +255,22 @@ const pageContent = {
         title: "工具区",
         type: "custom",
         customId: "ticSweepToolRoot"
+      }
+    ],
+    side: []
+  },
+
+  "daily-no-scanning": {
+    hero: {
+      tag: "",
+      title: "No Scanning Analyzer",
+      desc: "批量导入 No Scanning Treatment Record，按记录汇总并绘制 Position 与 Sigma 趋势。"
+    },
+    sections: [
+      {
+        title: "工具区",
+        type: "custom",
+        customId: "noScanningToolRoot"
       }
     ],
     side: []

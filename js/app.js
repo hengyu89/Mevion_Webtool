@@ -1,5 +1,5 @@
 /* global findParentIdByChildId, initErrorAnalyzerToolPage, initPatientCounterToolPage */
-/* global initTcShiftToolPage, initTicMonitorToolPage, initTicSweepToolPage */
+/* global initNoScanningToolPage, initTcShiftToolPage, initTicMonitorToolPage, initTicSweepToolPage */
 /* global menuData, renderMainContent, renderMenu, renderSideContent */
 
 const state = {
@@ -163,6 +163,10 @@ function initPageModule(pageId) {
 
   if (pageId === "daily-tic-sweep") {
     initTicSweepToolPage();
+  }
+
+  if (pageId === "daily-no-scanning") {
+    initNoScanningToolPage();
   }
 }
 
