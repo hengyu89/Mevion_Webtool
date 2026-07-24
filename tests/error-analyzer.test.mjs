@@ -15,7 +15,7 @@ const context = vm.createContext({
   window: {}
 });
 vm.runInContext(
-  `${interlockCatalogSource}\n${analyzerSource}\nglobalThis.errorAnalyzerTestApi = { parseErrorAnalyzerFiles, highlightErrorAnalyzerMessage, filterErrorAnalyzerAlertsByLevel, getErrorAnalyzerLevelStatistics, getErrorAnalyzerNoteSummary, renderErrorAnalyzerNote, renderErrorAnalyzerMessages };`,
+  `${interlockCatalogSource}\n${analyzerSource}\nglobalThis.errorAnalyzerTestApi = { parseErrorAnalyzerFiles, highlightErrorAnalyzerMessage, filterErrorAnalyzerAlertsByLevel, getErrorAnalyzerLevelStatistics, getErrorAnalyzerNoteSummary, renderErrorAnalyzerNote, renderErrorAnalyzerMessages, formatErrorAnalyzerTimeRange };`,
   context
 );
 
@@ -45,6 +45,41 @@ test("parses headerless TCLogger rollover files without dropping their first row
   assert.equal(result.alerts.length, 2);
   assert.ok(result.alerts.some((alert) => alert.ruleLabel === "Galil Disabled"));
   assert.ok(result.alerts.some((alert) => alert.ruleLabel === "dTime"));
+});
+
+test("fast candidate filtering preserves quoted multiline CSV records and row numbers", async () => {
+  const csv = makeCsv([
+    '2026-07-17 23:12:20.000,INFO,MCC,TEST,NO_ERROR,2026-07-17 15:12:20.000,"Ordinary message, with ""quoted"" detail\ncontinued on the next line",Test.cpp',
+    '2026-07-17 23:17:26.251,INFO,MCC,STATE_MANAGER,NO_ERROR,2026-07-17 15:17:26.251,"Logging Abnormal Termination Condition: TREATMENT_TIME_LIMIT in CLINICAL",WorkflowManager.cpp'
+  ]);
+
+  const result = await context.errorAnalyzerTestApi.parseErrorAnalyzerFiles([
+    mockFile("TCLogger-multiline.csv", csv)
+  ]);
+
+  assert.equal(result.parsedRows, 2);
+  assert.equal(result.alerts.length, 1);
+  assert.equal(result.alerts[0].ruleLabel, "dTime");
+  assert.equal(result.alerts[0].rowIndex, 2);
+});
+
+test("reports the full log time range including ordinary skipped records", async () => {
+  const csv = makeCsv([
+    '2026-06-01 00:00:01.100,INFO,MCC,TEST,NO_ERROR,2026-05-31 16:00:01.100,"Ordinary first message",Test.cpp',
+    '2026-06-15 12:00:00.000,INFO,MCC,STATE_MANAGER,NO_ERROR,2026-06-15 04:00:00.000,"Logging Abnormal Termination Condition: BEAM_KEY in SERVICE",WorkflowManager.cpp',
+    '2026-06-30 23:59:58.900,INFO,MCC,TEST,NO_ERROR,2026-06-30 15:59:58.900,"Ordinary final message",Test.cpp'
+  ]);
+
+  const result = await context.errorAnalyzerTestApi.parseErrorAnalyzerFiles([
+    mockFile("TCLogger-range.csv", csv)
+  ]);
+
+  assert.equal(result.timeRange.start, "2026-06-01 00:00:01.100");
+  assert.equal(result.timeRange.end, "2026-06-30 23:59:58.900");
+  assert.equal(
+    context.errorAnalyzerTestApi.formatErrorAnalyzerTimeRange(result.timeRange),
+    "2026年6月1日 00:00 – 6月30日 23:59"
+  );
 });
 
 test("identifies the malformed file when a batch cannot be parsed", async () => {
@@ -124,6 +159,28 @@ test("labels a merged dPos incident with its DOS X source", async () => {
   assert.equal(result.alerts.length, 1);
   assert.equal(result.alerts[0].ruleLabel, "dPos");
   assert.equal(result.alerts[0].note, "Dose position / DOS X");
+});
+
+test("merges different DOS X and DOS Y gross-position details with one dPos termination", async () => {
+  const csv = makeCsv([
+    '2026-06-15 06:49:13.309,WARNING,DOSX_SW,DOSX_PCM,DEVICE_ERROR,2026-06-14 22:49:13.309,"ERROR-4051: Beam gross position check error on pulse 0: US Expected = 2, US Actual = 13, DS Expected = 6, DS Actual = 29, US Tol = 2 strips, DS Tol = 2 strips [Interrupt]",DOS_Controller.cpp',
+    '2026-06-15 06:49:13.323,WARNING,DOSY_SW,DOSY_PCM,DEVICE_ERROR,2026-06-14 22:49:13.323,"ERROR-4051: Beam gross position check error on pulse 0: US Expected = 3, US Actual = 15, DS Expected = 7, DS Actual = 31, US Tol = 2 strips, DS Tol = 2 strips [Interrupt]",DOS_Controller.cpp',
+    '2026-06-15 06:49:13.442,INFO,MCC,STATE_MANAGER,NO_ERROR,2026-06-14 22:49:13.442,"Logging Abnormal Termination Condition: DOSE_POSITION in SERVICE",WorkflowManager.cpp'
+  ]);
+
+  const result = await context.errorAnalyzerTestApi.parseErrorAnalyzerFiles([
+    mockFile("TCLogger.csv", csv)
+  ]);
+
+  assert.equal(result.alerts.length, 1);
+  assert.equal(result.alerts[0].ruleLabel, "dPos");
+  assert.equal(result.alerts[0].level, "service");
+  assert.equal(result.alerts[0].incidentKind, "dosePosition");
+  assert.equal(result.alerts[0].note, "Dose position / DOS X / DOS Y");
+  assert.equal(result.alerts[0].messages.length, 3);
+  assert.match(result.alerts[0].messages[0], /US Expected = 2/);
+  assert.match(result.alerts[0].messages[1], /US Expected = 3/);
+  assert.match(result.alerts[0].messages[2], /DOSE_POSITION in SERVICE/);
 });
 
 test("keeps dTime only for treatment time limit terminations", async () => {
@@ -538,6 +595,22 @@ test("filters Clinical, Warning, and Service independently", () => {
   );
 });
 
+test("filters the table by an exact displayed Type label", () => {
+  const alerts = [
+    { level: "critical", ruleLabel: "dPos" },
+    { level: "warning", typeLabels: ["sAAPos", "sAAErr"] },
+    { level: "service", ruleLabel: "hBKey" }
+  ];
+  const visible = context.errorAnalyzerTestApi.filterErrorAnalyzerAlertsByLevel(
+    alerts,
+    { critical: true, warning: true, service: true },
+    "sAAPos"
+  );
+
+  assert.equal(visible.length, 1);
+  assert.deepEqual(Array.from(visible[0].typeLabels), ["sAAPos", "sAAErr"]);
+});
+
 test("uses the exact code for an unmapped error", async () => {
   const csv = makeCsv([
     '2026-07-06 23:42:46.905,WARNING,DOSX_SW,DOSX_PCM,DEVICE_ERROR,2026-07-06 15:42:46.905,"ERROR-4074: Hardware fault is present as determined by externally monitored signals",DOS_Controller.cpp'
@@ -743,11 +816,11 @@ test("uses immediate nozzle collision evidence to classify unknown clinical stop
 test("summarizes each severity by the displayed Type labels", () => {
   const statistics = context.errorAnalyzerTestApi.getErrorAnalyzerLevelStatistics(
     [
-      { level: "critical", ruleLabel: "CIG Collision" },
-      { level: "critical", ruleLabel: "CIG Collision" },
-      { level: "critical", typeLabels: ["sAAPos"] },
-      { level: "critical", typeLabels: ["sAAPos"] },
       { level: "critical", typeLabels: ["sRSPos"] },
+      { level: "critical", typeLabels: ["sAAPos"] },
+      { level: "critical", ruleLabel: "CIG Collision" },
+      { level: "critical", ruleLabel: "CIG Collision" },
+      { level: "critical", typeLabels: ["sAAPos"] },
       { level: "warning", ruleLabel: "dEnv" }
     ],
     "critical"

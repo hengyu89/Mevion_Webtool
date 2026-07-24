@@ -31,6 +31,7 @@ console.log(
   JSON.stringify(
     {
       files: filePaths.length,
+      timeRange: result.timeRange,
       alerts: result.alerts.length,
       events: result.alerts.map((alert, index) => ({
         index: index + 1,

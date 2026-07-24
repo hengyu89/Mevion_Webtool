@@ -38,9 +38,14 @@
   position: relative;
   display: inline-flex;
   align-items: center;
+  user-select: none;
+}
+
+.error-analyzer-level-filter-control {
+  display: inline-flex;
+  align-items: center;
   gap: 4px;
   cursor: pointer;
-  user-select: none;
 }
 
 .error-analyzer-level-filter input {
@@ -71,7 +76,7 @@
 .error-analyzer-level-tooltip {
   position: absolute;
   z-index: 20;
-  top: calc(100% + 7px);
+  top: calc(100% + 5px);
   left: 50%;
   display: none;
   min-width: 170px;
@@ -87,7 +92,16 @@
   white-space: nowrap;
   transform: translateX(-50%);
   cursor: default;
-  pointer-events: none;
+  pointer-events: auto;
+}
+
+.error-analyzer-level-tooltip::after {
+  position: absolute;
+  right: 0;
+  bottom: 100%;
+  left: 0;
+  height: 7px;
+  content: "";
 }
 
 .error-analyzer-level-tooltip::before {
@@ -110,31 +124,80 @@
 }
 
 .error-analyzer-level-tooltip > strong {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
   padding-bottom: 3px;
   border-bottom: 1px solid #575757;
   color: #fff;
   font-size: 11px;
 }
 
-.error-analyzer-level-tooltip > span {
+.error-analyzer-level-tooltip > strong small {
+  color: #aaa;
+  font-size: 9px;
+  font-weight: 400;
+}
+
+.error-analyzer-level-tooltip > button {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 14px;
+  min-width: 100%;
+  padding: 1px 3px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
-.error-analyzer-level-tooltip > span b {
+.error-analyzer-level-tooltip > button:hover,
+.error-analyzer-level-tooltip > button:focus-visible {
+  outline: none;
+  background: #4a4a4a;
+}
+
+.error-analyzer-level-tooltip > button b {
   overflow: hidden;
   color: #f3f3f3;
   font-weight: 600;
   text-overflow: ellipsis;
 }
 
-.error-analyzer-level-tooltip > span i,
+.error-analyzer-level-tooltip > button i,
 .error-analyzer-level-tooltip > em {
   color: #cfcfcf;
   font-style: normal;
   font-variant-numeric: tabular-nums;
+}
+
+.error-analyzer-type-filter-reset {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 2px 7px;
+  border: 1px solid #9b9b9b;
+  border-radius: 9px;
+  background: #fff;
+  color: #444;
+  font: inherit;
+  cursor: pointer;
+}
+
+.error-analyzer-type-filter-reset:hover,
+.error-analyzer-type-filter-reset:focus-visible {
+  border-color: #555;
+  background: #f4f4f4;
+}
+
+.error-analyzer-type-filter-reset span {
+  color: #8f2424;
+  font-size: 13px;
+  line-height: 1;
 }
 
 .error-analyzer-summary small {

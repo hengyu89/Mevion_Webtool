@@ -1,6 +1,7 @@
 const errorAnalyzerState = {
   analysis: null,
   sortMode: "time",
+  typeFilter: "",
   levelVisibility: {
     critical: true,
     warning: true,
@@ -26,7 +27,8 @@ const ERROR_ANALYZER_DOSE_COMPARE_RE =
   /ERROR-\d+\b:\s*[A-Za-z0-9-]+\s+charge comparison (?:failure|error)\b/i;
 const ERROR_ANALYZER_DOSE_COMPARE_SUMMARY_RE =
   /ERROR-\d+\b:\s*Charge comparison (?:failure|error)\b/i;
-const ERROR_ANALYZER_DOSE_POSITION_RE = /ERROR-4057\b.*?\bAverage error for layer\b/i;
+const ERROR_ANALYZER_DOSE_POSITION_RE =
+  /(?:ERROR-4057\b.*?\bAverage error for layer\b|ERROR-4051\b.*?\bBeam gross position check error\b)/i;
 const ERROR_ANALYZER_SPOT_CHARGE_RE = /ERROR-4056\b.*?\bSpot charge limit error\b/i;
 const ERROR_ANALYZER_DOSE_LAYER_SHIFT_RE = /ERROR-4063\b.*?\bInitial frame shift\b/i;
 const ERROR_ANALYZER_SPOT_SIZE_RE = /\b(?:average|gross) spot size is out of tolerance\b/i;
@@ -50,6 +52,10 @@ const ERROR_ANALYZER_KUKA_COMMS_LATCHED_RE = /^IL_PLC_TO_KUKA_COMMS became LATCH
 const ERROR_ANALYZER_KUKA_COMMS_SATISFIED_RE = /^IL_PLC_TO_KUKA_COMMS became satisfied\b/i;
 const ERROR_ANALYZER_KUKA_COMMS_UNLATCHED_RE = /^IL_PLC_TO_KUKA_COMMS became UN-LATCHED\b/i;
 const ERROR_ANALYZER_KUKA_ONLINE_RE = /^PTS250_DEVICE_KUKA_KRL_SW is ONLINE\b/i;
+const ERROR_ANALYZER_RAW_CANDIDATE_RE =
+  /ERROR-|Logging Abnormal Termination Condition:|Heap Free (?:WARNING|CRITICAL)|Range Shifter calibration check finished\.|spot size is out of tolerance|Beam-On time of|Nozzle Collision Detected|Position mismatch error:|ACM interrupt received in error state\.|IL_PLC_TO_KUKA_COMMS became|PTS250_DEVICE_KUKA_KRL_SW is ONLINE|MOTION_ERROR_GALIL_INVALID_BG_WHILE_DISABLED|\(Node\s+\d+\).*?err\.\s*:|G[45]\s*\((?:RF|Cryostat)\).*?pressure\s+of/i;
+const ERROR_ANALYZER_RAW_DATA_RECORD_RE =
+  /^\ufeff?\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?,/;
 const ERROR_ANALYZER_AA_AXIS_BY_RIGHT_BIT = Object.freeze([
   "A",
   "B1",
@@ -83,16 +89,44 @@ const ERROR_ANALYZER_TERMINATION_TYPES = Object.freeze({
   AA_POSITION_MISMATCH: "sAAPos"
 });
 
+const ERROR_ANALYZER_DOSE_ERROR_TYPES = [
+  {
+    id: "doseCompare",
+    label: "dCompare",
+    termination: "DOSE_COMPARISONS",
+    matches: isErrorAnalyzerDoseComparisonMessage,
+    getNote: (message) => getErrorAnalyzerDoseComparisonName(message) || "Dose comparison",
+    highlight: highlightErrorAnalyzerDoseCompareMessage
+  },
+  {
+    id: "dosePosition",
+    label: "dPos",
+    termination: "DOSE_POSITION",
+    matches: (message) => ERROR_ANALYZER_DOSE_POSITION_RE.test(message),
+    getNote: () => "Dose position",
+    highlight: highlightErrorAnalyzerDosePositionMessage
+  },
+  {
+    id: "spotChargeLimit",
+    label: "dCharge",
+    termination: "SPOT_DOSE_LIMIT",
+    matches: (message) => ERROR_ANALYZER_SPOT_CHARGE_RE.test(message),
+    getNote: () => "Spot charge limit",
+    highlight: highlightErrorAnalyzerSpotChargeMessage
+  },
+  {
+    id: "doseLayerShift",
+    label: "dShift",
+    termination: "DOSE_LAYER_SHIFT_LIMIT",
+    matches: (message) => ERROR_ANALYZER_DOSE_LAYER_SHIFT_RE.test(message),
+    getNote: () => "Layer shift"
+  }
+];
+
 const ERROR_ANALYZER_KNOWN_ERROR_TYPES = [
   { label: "sRSPos", matches: (message) => ERROR_ANALYZER_RS_CV_RE.test(message) },
   { label: "sRSPos", matches: (message) => ERROR_ANALYZER_RS_PLATE_MOTION_CODE_RE.test(message) },
-  {
-    label: "dCompare",
-    matches: isErrorAnalyzerDoseComparisonMessage
-  },
-  { label: "dPos", matches: (message) => ERROR_ANALYZER_DOSE_POSITION_RE.test(message) },
-  { label: "dCharge", matches: (message) => ERROR_ANALYZER_SPOT_CHARGE_RE.test(message) },
-  { label: "dShift", matches: (message) => ERROR_ANALYZER_DOSE_LAYER_SHIFT_RE.test(message) },
+  ...ERROR_ANALYZER_DOSE_ERROR_TYPES,
   { label: "sAAErr", matches: (message) => ERROR_ANALYZER_AA_TIMEOUT_RE.test(message) },
   { label: "dEnv", matches: (message) => ERROR_ANALYZER_TIC_ENVIRONMENT_RE.test(message) },
   { label: "wSMSt", matches: (message) => ERROR_ANALYZER_SM_COOLING_PRESSURE_RE.test(message) }
@@ -142,40 +176,14 @@ const ERROR_ANALYZER_CORRELATIONS = [
     matchesResult: (alert) => isErrorAnalyzerTermination(alert, "XYZ_SUBSYSTEM_LOADED"),
     getNote: () => "Pulse retry limit"
   },
-  {
-    id: "doseCompare",
+  ...ERROR_ANALYZER_DOSE_ERROR_TYPES.map((definition) => ({
+    id: definition.id,
     maxMs: 1500,
-    matchesEvidence: (alert) =>
-      alert.ruleId === "errorCode" && isErrorAnalyzerDoseComparisonMessage(alert.message),
-    matchesResult: (alert) => isErrorAnalyzerTermination(alert, "DOSE_COMPARISONS"),
-    getNote: (evidence) => getErrorAnalyzerDoseComparisonName(evidence.message) || "Dose comparison"
-  },
-  {
-    id: "dosePosition",
-    maxMs: 1500,
-    matchesEvidence: (alert) =>
-      alert.ruleId === "errorCode" && ERROR_ANALYZER_DOSE_POSITION_RE.test(alert.message),
-    matchesResult: (alert) => isErrorAnalyzerTermination(alert, "DOSE_POSITION"),
-    getLabel: () => "dPos",
-    getNote: () => "Dose position"
-  },
-  {
-    id: "spotChargeLimit",
-    maxMs: 1500,
-    matchesEvidence: (alert) =>
-      alert.ruleId === "errorCode" && ERROR_ANALYZER_SPOT_CHARGE_RE.test(alert.message),
-    matchesResult: (alert) => isErrorAnalyzerTermination(alert, "SPOT_DOSE_LIMIT"),
-    getNote: () => "Spot charge limit"
-  },
-  {
-    id: "doseLayerShift",
-    maxMs: 1500,
-    matchesEvidence: (alert) =>
-      alert.ruleId === "errorCode" && ERROR_ANALYZER_DOSE_LAYER_SHIFT_RE.test(alert.message),
-    matchesResult: (alert) => isErrorAnalyzerTermination(alert, "DOSE_LAYER_SHIFT_LIMIT"),
-    getLabel: () => "dShift",
-    getNote: () => "Layer shift"
-  },
+    matchesEvidence: (alert) => alert.ruleId === "errorCode" && definition.matches(alert.message),
+    matchesResult: (alert) => isErrorAnalyzerTermination(alert, definition.termination),
+    getLabel: () => definition.label,
+    getNote: (evidence) => definition.getNote(evidence.message)
+  })),
   {
     id: "spotSize",
     maxMs: 1500,
@@ -475,9 +483,11 @@ function bindErrorAnalyzerEvents() {
       });
 
       errorAnalyzerState.analysis = analysis;
+      errorAnalyzerState.typeFilter = "";
       renderErrorAnalyzer();
+      const timeRange = formatErrorAnalyzerTimeRange(analysis.timeRange);
       setStatus(
-        `共 ${selectedFiles.length} 份文件，耗时 ${formatErrorAnalyzerElapsed(performance.now() - startTime)}，分析完成！发现 ${analysis.alerts.length} 个需要关注的事件。`,
+        `共 ${selectedFiles.length} 份文件${timeRange ? `，日志范围：${timeRange}` : ""}，耗时 ${formatErrorAnalyzerElapsed(performance.now() - startTime)}；分析完成！发现 ${analysis.alerts.length} 个需要关注的事件。`,
         "done"
       );
     } catch (error) {
@@ -535,6 +545,10 @@ async function parseErrorAnalyzerFiles(files, onProgress) {
   const result = {
     files: orderedFiles.map((file) => file.name),
     parsedRows: 0,
+    timeRange: {
+      start: "",
+      end: ""
+    },
     alerts: [],
     counts: {
       errorCode: 0,
@@ -590,46 +604,60 @@ async function parseErrorAnalyzerFiles(files, onProgress) {
 function parseErrorAnalyzerCsvText(text, sourceFile, result, alertMap) {
   let headerIndexes = null;
   let logicalRowIndex = 0;
+  updateErrorAnalyzerTimeRangeFromText(result.timeRange, text);
 
-  parseErrorAnalyzerCsvRecords(text, (columns) => {
-    if (!headerIndexes) {
-      if (isErrorAnalyzerDataRecord(columns)) {
-        headerIndexes = getErrorAnalyzerDefaultHeaderIndexes();
-      } else {
-        headerIndexes = getErrorAnalyzerHeaderIndexes(columns);
+  parseErrorAnalyzerCsvRecords(
+    text,
+    (columns) => {
+      if (!headerIndexes) {
+        if (isErrorAnalyzerDataRecord(columns)) {
+          headerIndexes = getErrorAnalyzerDefaultHeaderIndexes();
+        } else {
+          headerIndexes = getErrorAnalyzerHeaderIndexes(columns);
+          return;
+        }
+      }
+
+      logicalRowIndex += 1;
+      const timestamp = String(columns[headerIndexes.timestamp] || "").trim();
+      const message = String(columns[headerIndexes.message] || "").trim();
+      if (!timestamp && !message) return;
+      result.parsedRows += 1;
+
+      const extra = headerIndexes.extra >= 0 ? String(columns[headerIndexes.extra] || "").trim() : "";
+      const rule = findErrorAnalyzerRule(message, extra);
+      if (!rule) return;
+
+      const row = makeErrorAnalyzerRow(columns, headerIndexes, sourceFile, logicalRowIndex);
+      const alert = makeErrorAnalyzerAlert(row, rule);
+      const key = getErrorAnalyzerAlertKey(alert);
+      const existing = alertMap.get(key);
+      if (!existing) {
+        alertMap.set(key, alert);
         return;
       }
-    }
 
-    logicalRowIndex += 1;
-    const timestamp = String(columns[headerIndexes.timestamp] || "").trim();
-    const message = String(columns[headerIndexes.message] || "").trim();
-    if (!timestamp && !message) return;
-    result.parsedRows += 1;
-
-    const extra = headerIndexes.extra >= 0 ? String(columns[headerIndexes.extra] || "").trim() : "";
-    const rule = findErrorAnalyzerRule(message, extra);
-    if (!rule) return;
-
-    const row = makeErrorAnalyzerRow(columns, headerIndexes, sourceFile, logicalRowIndex);
-    const alert = makeErrorAnalyzerAlert(row, rule);
-    const key = getErrorAnalyzerAlertKey(alert);
-    const existing = alertMap.get(key);
-    if (!existing) {
-      alertMap.set(key, alert);
-      return;
+      if (appendErrorAnalyzerMessage(existing, alert.message)) {
+        existing.relatedRows += 1;
+      }
+      existing.note = mergeErrorAnalyzerNotes(existing.note, alert.note);
+      if (getErrorAnalyzerMessagePriority(alert.message) > getErrorAnalyzerMessagePriority(existing.message)) {
+        existing.extra = alert.extra;
+        existing.category = alert.category;
+        existing.severity = alert.severity;
+      }
+    },
+    {
+      shouldParse: (rawRecord, recordIndex) =>
+        recordIndex === 0 ||
+        !ERROR_ANALYZER_RAW_DATA_RECORD_RE.test(rawRecord) ||
+        ERROR_ANALYZER_RAW_CANDIDATE_RE.test(rawRecord),
+      onSkipped: () => {
+        logicalRowIndex += 1;
+        result.parsedRows += 1;
+      }
     }
-
-    if (appendErrorAnalyzerMessage(existing, alert.message)) {
-      existing.relatedRows += 1;
-    }
-    existing.note = mergeErrorAnalyzerNotes(existing.note, alert.note);
-    if (getErrorAnalyzerMessagePriority(alert.message) > getErrorAnalyzerMessagePriority(existing.message)) {
-      existing.extra = alert.extra;
-      existing.category = alert.category;
-      existing.severity = alert.severity;
-    }
-  });
+  );
 }
 
 function makeErrorAnalyzerAlert(row, rule) {
@@ -677,7 +705,7 @@ function getErrorAnalyzerType(row, rule) {
   }
 
   if (rule.id === "errorCode") {
-    const knownType = ERROR_ANALYZER_KNOWN_ERROR_TYPES.find((candidate) => candidate.matches(row.message));
+    const knownType = getErrorAnalyzerKnownErrorType(row.message);
     const code = getErrorAnalyzerCode(row.message);
     return {
       label: knownType?.label || (code ? `ERROR-${code}` : rule.label),
@@ -704,12 +732,8 @@ function getErrorAnalyzerNote(row, rule) {
   if (rule.id === "errorCode" && ERROR_ANALYZER_RS_PLATE_MOTION_CODE_RE.test(row.message)) {
     return "Range shifter plate motion";
   }
-  if (rule.id === "errorCode" && isErrorAnalyzerDoseComparisonMessage(row.message)) {
-    return getErrorAnalyzerDoseComparisonName(row.message) || "Dose comparison";
-  }
-  if (rule.id === "errorCode" && ERROR_ANALYZER_SPOT_CHARGE_RE.test(row.message)) {
-    return "Spot charge limit";
-  }
+  const doseErrorType = rule.id === "errorCode" ? getErrorAnalyzerDoseErrorType(row.message) : null;
+  if (doseErrorType) return doseErrorType.getNote(row.message);
   if (rule.id === "errorCode" && ERROR_ANALYZER_TIC_TEMPERATURE_RE.test(row.message)) {
     return "TIC temperature spread";
   }
@@ -1508,8 +1532,8 @@ function mergeErrorAnalyzerDosPairAlerts(alerts) {
         candidate.sourceFile === alert.sourceFile &&
         candidate.ruleId === "errorCode" &&
         getErrorAnalyzerCode(candidate.message) === errorCode &&
-        normalizeErrorAnalyzerMessage(candidate.message) === normalizeErrorAnalyzerMessage(alert.message) &&
-        (candidate.dosAxes || []).some((axis) => !axes.includes(axis))
+        (candidate.dosAxes || []).length > 0 &&
+        !(candidate.dosAxes || []).some((axis) => axes.includes(axis))
       ) {
         matchIndex = index;
         break;
@@ -1522,6 +1546,7 @@ function mergeErrorAnalyzerDosPairAlerts(alerts) {
     }
 
     const candidate = merged[matchIndex];
+    appendErrorAnalyzerMessage(candidate, alert.message);
     const combinedAxes = Array.from(new Set([...(candidate.dosAxes || []), ...axes]));
     const sourceLabels = Array.from(
       new Set([getErrorAnalyzerSourceLabel(candidate), getErrorAnalyzerSourceLabel(alert)].filter(Boolean))
@@ -1705,6 +1730,14 @@ function isErrorAnalyzerDoseComparisonMessage(message) {
   );
 }
 
+function getErrorAnalyzerDoseErrorType(message) {
+  return ERROR_ANALYZER_DOSE_ERROR_TYPES.find((candidate) => candidate.matches(message)) || null;
+}
+
+function getErrorAnalyzerKnownErrorType(message) {
+  return ERROR_ANALYZER_KNOWN_ERROR_TYPES.find((candidate) => candidate.matches(message)) || null;
+}
+
 function getErrorAnalyzerDoseComparisonName(message) {
   return (
     String(message || "").match(
@@ -1715,13 +1748,6 @@ function getErrorAnalyzerDoseComparisonName(message) {
 
 function getErrorAnalyzerPulseNumber(message) {
   return String(message || "").match(/\bon pulse\s+(\d+)\b/i)?.[1] || "";
-}
-
-function normalizeErrorAnalyzerMessage(message) {
-  return String(message || "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
 }
 
 function getErrorAnalyzerSourceLabel(alert) {
@@ -1756,52 +1782,88 @@ function getErrorAnalyzerMessagePriority(message) {
   return 0;
 }
 
-function parseErrorAnalyzerCsvRecords(text, onRecord) {
+function parseErrorAnalyzerCsvRecords(text, onRecord, options = {}) {
   const source = String(text || "");
   const sourceLength = source.length;
-  let fieldStart = source.charCodeAt(0) === 0xfeff ? 1 : 0;
-  let record = [];
+  let recordStart = source.charCodeAt(0) === 0xfeff ? 1 : 0;
   let inQuotes = false;
+  let recordIndex = 0;
 
-  function pushField(endIndex) {
-    let field = source.slice(fieldStart, endIndex);
-    if (field.endsWith("\r")) field = field.slice(0, -1);
-    if (field.startsWith('"') && field.endsWith('"')) {
-      field = field.slice(1, -1).replace(/""/g, '"');
+  function emitRecord(endIndex) {
+    let rawRecord = source.slice(recordStart, endIndex);
+    if (rawRecord.endsWith("\r")) rawRecord = rawRecord.slice(0, -1);
+    if (!rawRecord) return;
+
+    if (typeof options.shouldParse === "function" && !options.shouldParse(rawRecord, recordIndex)) {
+      if (typeof options.onSkipped === "function") options.onSkipped(rawRecord, recordIndex);
+    } else {
+      onRecord(parseErrorAnalyzerCsvRecord(rawRecord));
     }
-    record.push(field);
+    recordIndex += 1;
   }
 
-  for (let index = fieldStart; index < sourceLength; index += 1) {
-    const char = source[index];
+  let scanIndex = recordStart;
+  while (scanIndex < sourceLength) {
+    const quoteIndex = source.indexOf('"', scanIndex);
     if (inQuotes) {
-      if (char === '"') {
-        if (source[index + 1] === '"') {
-          index += 1;
-        } else {
-          inQuotes = false;
-        }
+      if (quoteIndex < 0) break;
+      if (source[quoteIndex + 1] === '"') {
+        scanIndex = quoteIndex + 2;
+      } else {
+        inQuotes = false;
+        scanIndex = quoteIndex + 1;
       }
       continue;
     }
 
-    if (char === '"' && index === fieldStart) {
+    const newlineIndex = source.indexOf("\n", scanIndex);
+    if (newlineIndex < 0) break;
+    if (quoteIndex >= 0 && quoteIndex < newlineIndex) {
+      if (quoteIndex === recordStart || source[quoteIndex - 1] === ",") inQuotes = true;
+      scanIndex = quoteIndex + 1;
+      continue;
+    }
+
+    emitRecord(newlineIndex);
+    recordStart = newlineIndex + 1;
+    scanIndex = recordStart;
+  }
+
+  if (recordStart < sourceLength) emitRecord(sourceLength);
+}
+
+function parseErrorAnalyzerCsvRecord(rawRecord) {
+  const columns = [];
+  const sourceLength = rawRecord.length;
+  let fieldStart = 0;
+  let inQuotes = false;
+
+  function pushField(endIndex) {
+    let field = rawRecord.slice(fieldStart, endIndex);
+    if (field.startsWith('"') && field.endsWith('"')) {
+      field = field.slice(1, -1).replace(/""/g, '"');
+    }
+    columns.push(field);
+  }
+
+  for (let index = 0; index < sourceLength; index += 1) {
+    const char = rawRecord[index];
+    if (inQuotes) {
+      if (char === '"' && rawRecord[index + 1] === '"') {
+        index += 1;
+      } else if (char === '"') {
+        inQuotes = false;
+      }
+    } else if (char === '"' && index === fieldStart) {
       inQuotes = true;
-    } else if (char === ",") {
+    } else if (char === "," && !inQuotes) {
       pushField(index);
-      fieldStart = index + 1;
-    } else if (char === "\n") {
-      pushField(index);
-      if (record.length > 1 || record[0] !== "") onRecord(record);
-      record = [];
       fieldStart = index + 1;
     }
   }
 
-  if (fieldStart < sourceLength || record.length) {
-    pushField(sourceLength);
-    if (record.length > 1 || record[0] !== "") onRecord(record);
-  }
+  pushField(sourceLength);
+  return columns;
 }
 
 function getErrorAnalyzerHeaderIndexes(header) {
@@ -1872,6 +1934,15 @@ function renderErrorAnalyzer() {
     ${renderErrorAnalyzerLevelFilter("critical", "Clinical", criticalCount, analysis.alerts)}
     ${renderErrorAnalyzerLevelFilter("warning", "Warning", warningCount, analysis.alerts)}
     ${renderErrorAnalyzerLevelFilter("service", "Service", serviceCount, analysis.alerts)}
+    ${
+      errorAnalyzerState.typeFilter
+        ? `<button class="error-analyzer-type-filter-reset" type="button" data-error-type-reset
+            title="清除 Type 筛选">
+            当前筛选: <b>${escapeErrorAnalyzerHtml(errorAnalyzerState.typeFilter)}</b>
+            <span aria-hidden="true">&times;</span>
+          </button>`
+        : ""
+    }
     <small>联锁名称参考 37022R13 / SAF19-JA4</small>
   `;
 
@@ -1880,6 +1951,18 @@ function renderErrorAnalyzer() {
       errorAnalyzerState.levelVisibility[checkbox.dataset.errorLevelFilter] = checkbox.checked;
       renderErrorAnalyzer();
     });
+  });
+
+  summary.querySelectorAll("[data-error-type-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      errorAnalyzerState.typeFilter = button.dataset.errorTypeFilter || "";
+      renderErrorAnalyzer();
+    });
+  });
+
+  summary.querySelector("[data-error-type-reset]")?.addEventListener("click", () => {
+    errorAnalyzerState.typeFilter = "";
+    renderErrorAnalyzer();
   });
 
   if (!analysis.alerts.length) {
@@ -1952,20 +2035,25 @@ function renderErrorAnalyzerLevelFilter(level, label, count, alerts) {
     ? statistics
         .map(
           ({ label: typeLabel, count: typeCount }) =>
-            `<span><b>${escapeErrorAnalyzerHtml(typeLabel)}</b><i>&times; ${typeCount}</i></span>`
+            `<button type="button" data-error-type-filter="${escapeErrorAnalyzerHtml(typeLabel)}"
+                title="只显示 ${escapeErrorAnalyzerHtml(typeLabel)}">
+              <b>${escapeErrorAnalyzerHtml(typeLabel)}</b><i>&times; ${typeCount}</i>
+            </button>`
         )
         .join("")
     : "<em>No events</em>";
   return `
-    <label class="error-analyzer-summary-item error-analyzer-level-filter level-${level}">
-      <input type="checkbox" data-error-level-filter="${level}" aria-describedby="${tooltipId}"${checked} />
-      <span>${label}</span>
-      <b>${count}</b>
+    <span class="error-analyzer-summary-item error-analyzer-level-filter level-${level}">
+      <label class="error-analyzer-level-filter-control">
+        <input type="checkbox" data-error-level-filter="${level}" aria-describedby="${tooltipId}"${checked} />
+        <span>${label}</span>
+        <b>${count}</b>
+      </label>
       <span id="${tooltipId}" class="error-analyzer-level-tooltip" role="tooltip">
-        <strong>${label}</strong>
+        <strong>${label}<small>点击 Type 筛选</small></strong>
         ${statisticsHtml}
       </span>
-    </label>
+    </span>
   `;
 }
 
@@ -1974,17 +2062,32 @@ function getErrorAnalyzerLevelStatistics(alerts, level) {
   Array.from(alerts || [])
     .filter((alert) => alert.level === level)
     .forEach((alert) => {
-      const labels =
-        Array.isArray(alert.typeLabels) && alert.typeLabels.length ? alert.typeLabels : [alert.ruleLabel];
+      const labels = getErrorAnalyzerAlertTypeLabels(alert);
       Array.from(new Set(labels.filter(Boolean))).forEach((label) => {
         counts.set(label, (counts.get(label) || 0) + 1);
       });
     });
-  return Array.from(counts, ([label, count]) => ({ label, count }));
+  return Array.from(counts, ([label, count]) => ({ label, count })).sort((left, right) =>
+    left.label.localeCompare(right.label, undefined, { sensitivity: "base", numeric: true })
+  );
 }
 
-function filterErrorAnalyzerAlertsByLevel(alerts, visibility = errorAnalyzerState.levelVisibility) {
-  return Array.from(alerts || []).filter((alert) => visibility?.[alert.level] !== false);
+function getErrorAnalyzerAlertTypeLabels(alert) {
+  return Array.isArray(alert?.typeLabels) && alert.typeLabels.length
+    ? Array.from(alert.typeLabels)
+    : [alert?.ruleLabel].filter(Boolean);
+}
+
+function filterErrorAnalyzerAlertsByLevel(
+  alerts,
+  visibility = errorAnalyzerState.levelVisibility,
+  typeFilter = errorAnalyzerState.typeFilter
+) {
+  return Array.from(alerts || []).filter(
+    (alert) =>
+      visibility?.[alert.level] !== false &&
+      (!typeFilter || getErrorAnalyzerAlertTypeLabels(alert).includes(typeFilter))
+  );
 }
 
 function getSortedErrorAnalyzerAlerts(alerts) {
@@ -2057,8 +2160,7 @@ function renderErrorAnalyzerTime(alert, startTimestamp) {
 }
 
 function renderErrorAnalyzerTypes(alert) {
-  const labels =
-    Array.isArray(alert.typeLabels) && alert.typeLabels.length ? alert.typeLabels : [alert.ruleLabel];
+  const labels = getErrorAnalyzerAlertTypeLabels(alert);
   return labels
     .map(
       (label) =>
@@ -2232,16 +2334,11 @@ function highlightErrorAnalyzerMessage(message, alert) {
   ) {
     return highlightErrorAnalyzerRsCvMessage(html);
   }
-  if (isErrorAnalyzerDoseComparisonMessage(message)) {
-    return highlightErrorAnalyzerDoseCompareMessage(html);
-  }
+  const doseErrorType = getErrorAnalyzerDoseErrorType(message);
+  if (doseErrorType?.highlight) return doseErrorType.highlight(html);
   if (ERROR_ANALYZER_SM_COOLING_PRESSURE_RE.test(message)) {
     return highlightErrorAnalyzerSmCoolingPressureMessage(html);
   }
-  if (ERROR_ANALYZER_DOSE_POSITION_RE.test(message)) {
-    return highlightErrorAnalyzerDosePositionMessage(html);
-  }
-  if (ERROR_ANALYZER_SPOT_CHARGE_RE.test(message)) return highlightErrorAnalyzerSpotChargeMessage(html);
   if (ERROR_ANALYZER_TIC_ENVIRONMENT_RE.test(message)) {
     return highlightErrorAnalyzerTicEnvironmentMessage(html);
   }
@@ -2403,6 +2500,56 @@ function highlightErrorAnalyzerTicEnvironmentMessage(html) {
 function splitErrorAnalyzerTimestamp(timestamp) {
   const match = String(timestamp || "").match(/^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2}(?:\.\d+)?)/);
   return match ? { date: match[1], time: match[2] } : { date: "-", time: String(timestamp || "-") };
+}
+
+function updateErrorAnalyzerTimeRangeFromText(timeRange, text) {
+  const source = String(text || "");
+  const timestampPattern = "([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?)";
+  const first = source.match(new RegExp(`(?:^|\\n)\\ufeff?${timestampPattern}(?=,)`));
+  if (first) updateErrorAnalyzerTimeRange(timeRange, first[1], true);
+
+  let lineEnd = source.length;
+  for (let attempts = 0; lineEnd > 0 && attempts < 100; attempts += 1) {
+    const lineStart = source.lastIndexOf("\n", lineEnd - 1) + 1;
+    const line = source.slice(lineStart, lineEnd).replace(/\r$/, "");
+    const last = line.match(new RegExp(`^\\ufeff?${timestampPattern}(?=,)`));
+    if (last) {
+      updateErrorAnalyzerTimeRange(timeRange, last[1], true);
+      break;
+    }
+    lineEnd = Math.max(0, lineStart - 1);
+  }
+}
+
+function updateErrorAnalyzerTimeRange(timeRange, timestamp, isValidated = false) {
+  const value = String(timestamp || "").trim();
+  if (
+    !timeRange ||
+    (!isValidated && !/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(value))
+  ) {
+    return;
+  }
+  if (!timeRange.start || value < timeRange.start) timeRange.start = value;
+  if (!timeRange.end || value > timeRange.end) timeRange.end = value;
+}
+
+function formatErrorAnalyzerTimeRange(timeRange) {
+  const parseParts = (timestamp) =>
+    String(timestamp || "").match(
+      /^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):\d{2}(?:\.\d+)?$/
+    );
+  const start = parseParts(timeRange?.start);
+  const end = parseParts(timeRange?.end);
+  if (!start || !end) return "";
+
+  const startText = `${Number(start[1])}年${Number(start[2])}月${Number(start[3])}日 ${start[4]}:${start[5]}`;
+  if (timeRange.start === timeRange.end) return startText;
+
+  const endText =
+    start[1] === end[1]
+      ? `${Number(end[2])}月${Number(end[3])}日 ${end[4]}:${end[5]}`
+      : `${Number(end[1])}年${Number(end[2])}月${Number(end[3])}日 ${end[4]}:${end[5]}`;
+  return `${startText} – ${endText}`;
 }
 
 function parseErrorAnalyzerTimestampMs(timestamp) {
