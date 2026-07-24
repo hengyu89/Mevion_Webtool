@@ -3,11 +3,45 @@
 const pageDomCache = new Map();
 
 function buildToolDirectoryButtonHtml(item) {
+  const tone = String(item.tone || "default").replace(/[^a-z0-9-]/gi, "");
   return `
-    <button class="tool-directory-link" type="button" data-page-id="${item.pageId}">
-      <span class="tool-directory-link-title">${item.label}</span>
-      <span class="tool-directory-link-desc">${item.desc || ""}</span>
+    <button class="tool-directory-link tool-directory-tone-${tone}" type="button" data-page-id="${item.pageId}">
+      <span class="tool-directory-link-icon" aria-hidden="true">${item.icon || "•"}</span>
+      <span class="tool-directory-link-text">
+        <span class="tool-directory-link-title">${item.label}</span>
+        <span class="tool-directory-link-desc">${item.desc || ""}</span>
+      </span>
     </button>
+  `;
+}
+
+function buildUpdateHistoryHtml(history) {
+  if (!Array.isArray(history) || !history.length) return "";
+  return `
+    <div class="update-history-control">
+      <button class="update-history-trigger" type="button"
+        aria-describedby="homeUpdateHistory" title="查看历史更新" aria-label="查看历史更新">
+        <span aria-hidden="true">↺</span>
+      </button>
+      <div id="homeUpdateHistory" class="update-history-popover" role="tooltip">
+        <strong>历史更新</strong>
+        <div class="update-history-list">
+          ${history
+            .map(
+              (entry) => `
+                <div class="update-history-entry">
+                  <div class="update-history-meta">
+                    <b>${entry.version || ""}</b>
+                    <time>${entry.date || ""}</time>
+                  </div>
+                  <div>${entry.content || ""}</div>
+                </div>
+              `
+            )
+            .join("")}
+        </div>
+      </div>
+    </div>
   `;
 }
 
@@ -43,8 +77,9 @@ function buildMainContentHtml(pageId) {
   (page.sections || []).forEach((section) => {
     if (section.type === "text") {
       html += `
-        <section class="card section-card">
+        <section class="card section-card ${section.history?.length ? "update-section-card" : ""}">
           <h2 class="section-title">${section.title}</h2>
+          ${buildUpdateHistoryHtml(section.history)}
           <div class="content-text">${section.content}</div>
         </section>
       `;

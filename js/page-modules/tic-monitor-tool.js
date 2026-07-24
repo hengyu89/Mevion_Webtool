@@ -14,12 +14,12 @@ const ticMonitorChartRuntime = {
 
 const TIC_SERIES = ["US TIC", "DS TIC X", "DS TIC Y"];
 const TIC_COLORS = {
-  "US TIC": "#10b981",
-  "DS TIC X": "#3b82f6",
-  "DS TIC Y": "#f59e0b"
+  "US TIC": "#4472c4",
+  "DS TIC X": "#ed7d31",
+  "DS TIC Y": "#196b24"
 };
 const TIC_CHART_SIZE = { width: 1000, height: 460 };
-const TIC_CHART_PADDING = { left: 74, right: 24, top: 30, bottom: 62 };
+const TIC_CHART_PADDING = { left: 74, right: 24, top: 18, bottom: 62 };
 
 function updateTicMonitorToolStatus(type, message) {
   if (!window.ToolStatusRegistry || typeof window.ToolStatusRegistry.setStatus !== "function") return;
@@ -281,15 +281,15 @@ function renderTicMonitorResults() {
   }
 
   root.innerHTML = `
-    ${renderTicChartPanel("temperature", "TIC Temperature", "TIC Temp vs. Time", "°C", "TIC Temp (°C)")}
-    ${renderTicChartPanel("pressure", "TIC Pressure", "TIC Pressure vs. Time", "hPa", "TIC Pressure (hPa)")}
+    ${renderTicChartPanel("temperature", "TIC Temperature", "°C", "TIC Temp (°C)")}
+    ${renderTicChartPanel("pressure", "TIC Pressure", "hPa", "TIC Pressure (hPa)")}
   `;
 
   bindTicLegendEvents(root);
   requestAnimationFrame(() => drawAllTicCharts());
 }
 
-function renderTicChartPanel(kind, panelTitle, plotTitle, unit, yAxisTitle) {
+function renderTicChartPanel(kind, panelTitle, unit, yAxisTitle) {
   return `
     <section class="chart-section-card tic-chart-card">
       <div class="chart-panel-top tic-chart-top">
@@ -305,7 +305,7 @@ function renderTicChartPanel(kind, panelTitle, plotTitle, unit, yAxisTitle) {
         </div>
       </div>
       <div class="chart-canvas-wrap tic-chart-wrap">
-        <canvas id="tic-${kind}-canvas" data-kind="${kind}" data-unit="${unit}" data-y-axis-title="${yAxisTitle}" data-canvas-title="${panelTitle}" data-plot-title="${plotTitle}" width="1000" height="460"></canvas>
+        <canvas id="tic-${kind}-canvas" data-kind="${kind}" data-unit="${unit}" data-y-axis-title="${yAxisTitle}" width="1000" height="460"></canvas>
       </div>
     </section>
   `;
@@ -342,6 +342,8 @@ function drawTicScatterChart(canvas, kind, unit) {
   const ctx = canvas.getContext("2d");
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, width, height);
 
   const data = ticMonitorState.points.filter((p) => p.kind === kind && ticMonitorState.visible[p.series]);
   const allKindData = ticMonitorState.points.filter((p) => p.kind === kind);
@@ -373,20 +375,42 @@ function drawTicScatterChart(canvas, kind, unit) {
   const yToPx = (value) => padding.top + (1 - (value - yMin) / (yMax - yMin)) * plotH;
 
   const yAxisTitle = canvas.dataset.yAxisTitle || (kind === "pressure" ? "TIC Pressure (hPa)" : "TIC Temp (°C)");
-  const canvasTitle = canvas.dataset.canvasTitle || (kind === "pressure" ? "TIC Pressure" : "TIC Temperature");
-  drawTicGrid(ctx, padding, plotW, plotH, xMin, xMax, yMin, yMax, xToPx, yToPx, yAxisTitle, yTicks, canvasTitle);
+  drawTicGrid(ctx, padding, plotW, plotH, xMin, xMax, yMin, yMax, xToPx, yToPx, yAxisTitle, yTicks);
 
   const drawnPoints = [];
 
   TIC_SERIES.forEach((series) => {
     if (!ticMonitorState.visible[series]) return;
+    const seriesData = data
+      .filter((p) => p.series === series)
+      .sort((a, b) => a.timeMs - b.timeMs);
+
+    if (seriesData.length > 1) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.strokeStyle = TIC_COLORS[series];
+      ctx.globalAlpha = 0.9;
+      ctx.lineWidth = 1;
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      drawSmoothTicLine(
+        ctx,
+        seriesData.map((point) => ({
+          x: xToPx(point.timeMs),
+          y: yToPx(point.value)
+        }))
+      );
+      ctx.stroke();
+      ctx.restore();
+    }
+
     ctx.fillStyle = TIC_COLORS[series];
-    data.filter((p) => p.series === series).forEach((p) => {
+    seriesData.forEach((p) => {
       const x = xToPx(p.timeMs);
       const y = yToPx(p.value);
       if (x < padding.left - 4 || x > padding.left + plotW + 4 || y < padding.top - 4 || y > padding.top + plotH + 4) return;
       ctx.beginPath();
-      ctx.arc(x, y, 5, 0, Math.PI * 2);
+      ctx.arc(x, y, 2.4, 0, Math.PI * 2);
       ctx.fill();
       drawnPoints.push({ x, y, point: p });
     });
@@ -410,28 +434,57 @@ function drawTicScatterChart(canvas, kind, unit) {
   }
 }
 
-function drawTicGrid(ctx, padding, plotW, plotH, xMin, xMax, yMin, yMax, xToPx, yToPx, yAxisTitle, yTicks = [], canvasTitle = "") {
+function drawSmoothTicLine(ctx, points) {
+  if (!points.length) return;
+
+  ctx.moveTo(points[0].x, points[0].y);
+  if (points.length === 1) return;
+
+  const tension = 0.85;
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const p0 = points[index - 1] || points[index];
+    const p1 = points[index];
+    const p2 = points[index + 1];
+    const p3 = points[index + 2] || p2;
+    const minX = Math.min(p1.x, p2.x);
+    const maxX = Math.max(p1.x, p2.x);
+    const minY = Math.min(p1.y, p2.y);
+    const maxY = Math.max(p1.y, p2.y);
+    const cp1X = clampTicControl(p1.x + ((p2.x - p0.x) * tension) / 6, minX, maxX);
+    const cp1Y = clampTicControl(p1.y + ((p2.y - p0.y) * tension) / 6, minY, maxY);
+    const cp2X = clampTicControl(p2.x - ((p3.x - p1.x) * tension) / 6, minX, maxX);
+    const cp2Y = clampTicControl(p2.y - ((p3.y - p1.y) * tension) / 6, minY, maxY);
+    ctx.bezierCurveTo(cp1X, cp1Y, cp2X, cp2Y, p2.x, p2.y);
+  }
+}
+
+function clampTicControl(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function drawTicGrid(ctx, padding, plotW, plotH, xMin, xMax, yMin, yMax, xToPx, yToPx, yAxisTitle, yTicks = []) {
   ctx.save();
 
-  ctx.strokeStyle = "rgba(0,0,0,0.10)";
+  ctx.strokeStyle = "#dedede";
   ctx.lineWidth = 1;
-  ctx.setLineDash([4, 4]);
+  ctx.setLineDash([]);
 
   const tickValues = getTicTimeAxisTicks(xMin, xMax);
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
   tickValues.forEach((timeMs) => {
     const x = xToPx(timeMs);
+    const gridX = Math.round(x) + 0.5;
     ctx.beginPath();
-    ctx.moveTo(x, padding.top);
-    ctx.lineTo(x, padding.top + plotH);
+    ctx.moveTo(gridX, Math.round(padding.top) + 0.5);
+    ctx.lineTo(gridX, Math.round(padding.top + plotH) + 0.5);
     ctx.stroke();
 
     ctx.setLineDash([]);
-    ctx.fillStyle = "#888";
+    ctx.fillStyle = "#666";
     ctx.font = "12px Segoe UI";
     drawTicWrappedXAxisLabel(ctx, formatTicAxisTime(timeMs, xMin, xMax), x, padding.top + plotH + 22);
-    ctx.setLineDash([4, 4]);
+    ctx.setLineDash([]);
   });
 
   const visibleYTicks = Array.isArray(yTicks) && yTicks.length ? yTicks : [yMin, (yMin + yMax) / 2, yMax];
@@ -439,34 +492,31 @@ function drawTicGrid(ctx, padding, plotW, plotH, xMin, xMax, yMin, yMax, xToPx, 
   ctx.textBaseline = "middle";
   visibleYTicks.forEach((value) => {
     const y = yToPx(value);
+    const gridY = Math.round(y) + 0.5;
     ctx.beginPath();
-    ctx.moveTo(padding.left, y);
-    ctx.lineTo(padding.left + plotW, y);
+    ctx.moveTo(Math.round(padding.left) + 0.5, gridY);
+    ctx.lineTo(Math.round(padding.left + plotW) + 0.5, gridY);
     ctx.stroke();
 
     ctx.setLineDash([]);
-    ctx.fillStyle = "#888";
+    ctx.fillStyle = "#666";
     ctx.font = "12px Segoe UI";
     ctx.fillText(formatTicAxisValue(value), padding.left - 10, y + 4);
-    ctx.setLineDash([4, 4]);
+    ctx.setLineDash([]);
   });
 
   ctx.setLineDash([]);
 
-  if (canvasTitle) {
-    ctx.fillStyle = "#888";
-    ctx.font = "700 16px Segoe UI";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(canvasTitle, padding.left + plotW / 2, 14);
-  }
-
-  ctx.strokeStyle = "rgba(0,0,0,0.22)";
-  ctx.lineWidth = 1.2;
+  ctx.strokeStyle = "#bfbfbf";
+  ctx.lineWidth = 1;
+  const axisLeft = Math.round(padding.left) + 0.5;
+  const axisTop = Math.round(padding.top) + 0.5;
+  const axisBottom = Math.round(padding.top + plotH) + 0.5;
+  const axisRight = Math.round(padding.left + plotW) + 0.5;
   ctx.beginPath();
-  ctx.moveTo(padding.left, padding.top);
-  ctx.lineTo(padding.left, padding.top + plotH);
-  ctx.lineTo(padding.left + plotW, padding.top + plotH);
+  ctx.moveTo(axisLeft, axisTop);
+  ctx.lineTo(axisLeft, axisBottom);
+  ctx.lineTo(axisRight, axisBottom);
   ctx.stroke();
 
   ctx.fillStyle = "#555";
@@ -629,12 +679,12 @@ function drawTicHoveredPoint(ctx, point) {
   ctx.save();
   ctx.beginPath();
   ctx.strokeStyle = "#111";
-  ctx.lineWidth = 2;
-  ctx.arc(point.x, point.y, 8, 0, Math.PI * 2);
+  ctx.lineWidth = 1.5;
+  ctx.arc(point.x, point.y, 5.8, 0, Math.PI * 2);
   ctx.stroke();
   ctx.beginPath();
   ctx.fillStyle = "#ffffff";
-  ctx.arc(point.x, point.y, 3, 0, Math.PI * 2);
+  ctx.arc(point.x, point.y, 2, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 }

@@ -908,6 +908,7 @@ test("groups dense range-shifter plate fault bursts and deduplicates their codes
     '2026-05-26 09:06:41.172,WARNING,MCC,XYZ_PCM,DEVICE_ERROR,2026-05-26 01:06:41.172,"ERROR-47014: Plate 1 Motor fault: undervoltage: check 100 Volt DC power supply",test.cpp',
     '2026-05-26 09:06:41.177,WARNING,MCC,XYZ_PCM,DEVICE_ERROR,2026-05-26 01:06:41.177,"ERROR-47003: Range shifter plate 1 motor fault",test.cpp',
     '2026-05-26 09:06:41.182,WARNING,MCC,XYZ_PCM,DEVICE_ERROR,2026-05-26 01:06:41.182,"ERROR-47006: Range shifter plate 1 drive undervoltage",test.cpp',
+    '2026-05-26 09:06:41.184,WARNING,MCC,XYZ_PCM,DEVICE_ERROR,2026-05-26 01:06:41.184,"ERROR-47012: ELMO SW exception for plate 1: register=0x15",test.cpp',
     '2026-05-26 09:06:41.187,WARNING,MCC,XYZ_PCM,DEVICE_ERROR,2026-05-26 01:06:41.187,"ERROR-47014: Plate 2 Motor fault: undervoltage: check 100 Volt DC power supply",test.cpp'
   ]);
 
@@ -915,9 +916,38 @@ test("groups dense range-shifter plate fault bursts and deduplicates their codes
 
   assert.equal(result.alerts.length, 1);
   assert.equal(result.alerts[0].incidentKind, "plateFaultBurst");
-  assert.deepEqual(Array.from(result.alerts[0].typeLabels), ["ERROR-47003", "ERROR-47006", "ERROR-47014"]);
-  assert.equal(result.alerts[0].messages.length, 4);
-  assert.equal(result.alerts[0].relatedRows, 4);
+  assert.deepEqual(Array.from(result.alerts[0].typeLabels), [
+    "ERROR-47003",
+    "ERROR-47006",
+    "ERROR-47012",
+    "ERROR-47014"
+  ]);
+  assert.equal(result.alerts[0].messages.length, 5);
+  assert.equal(result.alerts[0].note, "RS plate fault - Plate 1 / Plate 2 × 5");
+  assert.equal(result.alerts[0].relatedRows, 5);
+});
+
+test("groups one delayed RS plate fault chain but keeps a later fault separate", async () => {
+  const csv = makeCsv([
+    '2026-06-27 14:10:50.590,WARNING,MCC,XYZ_MCC,DEVICE_ERROR,2026-06-27 06:10:50.590,"ERROR-47014: Plate 14 Motor fault: main feedback error: check resolver wiring;",RS_Utility.cpp',
+    '2026-06-27 14:10:50.740,WARNING,MCC,XYZ_MCC,DEVICE_ERROR,2026-06-27 06:10:50.740,"ERROR-47003: Range shifter plate 14 motor fault",RS_Utility.cpp',
+    '2026-06-27 14:10:52.990,WARNING,MCC,XYZ_MCC,DEVICE_ERROR,2026-06-27 06:10:52.990,"ERROR-47012: ELMO SW exception for plate 14: register=0x3a",RS_Utility.cpp',
+    '2026-06-27 14:11:07.840,WARNING,MCC,XYZ_MCC,DEVICE_ERROR,2026-06-27 06:11:07.840,"ERROR-47003: Range shifter plate 14 motor fault",RS_Utility.cpp',
+    '2026-06-27 14:11:16.690,WARNING,MCC,XYZ_MCC,DEVICE_ERROR,2026-06-27 06:11:16.690,"ERROR-47014: Plate 14 Motor fault: main feedback error: check resolver wiring;",RS_Utility.cpp',
+    '2026-06-27 14:18:52.285,WARNING,MCC,XYZ_MCC,DEVICE_ERROR,2026-06-27 06:18:52.285,"ERROR-47012: ELMO SW exception for plate 11: register=0xa8",RS_Utility.cpp'
+  ]);
+
+  const result = await context.errorAnalyzerTestApi.parseErrorAnalyzerFiles([
+    mockFile("TCLogger.csv", csv)
+  ]);
+
+  assert.equal(result.alerts.length, 2);
+  assert.equal(result.alerts[0].incidentKind, "plateFaultBurst");
+  assert.equal(result.alerts[0].timestamp, "2026-06-27 14:10:50.590");
+  assert.equal(result.alerts[0].endTimestamp, "2026-06-27 14:11:16.690");
+  assert.equal(result.alerts[0].note, "RS plate fault - Plate 14 × 5");
+  assert.equal(result.alerts[0].messages.length, 5);
+  assert.equal(result.alerts[1].ruleLabel, "ERROR-47012");
 });
 
 test("groups a continuous TIC pressure run and preserves its time range", async () => {
@@ -941,6 +971,7 @@ test("groups a continuous TIC pressure run and preserves its time range", async 
   assert.equal(result.alerts[0].timestamp, "2026-05-26 13:46:05.054");
   assert.equal(result.alerts[0].endTimestamp, "2026-05-26 14:12:58.690");
   assert.equal(result.alerts[0].messages.length, 4);
+  assert.equal(result.alerts[0].note, "TIC pressure spread × 4");
 
   const highlighted = context.errorAnalyzerTestApi.highlightErrorAnalyzerMessage(
     result.alerts[0].messages[0],
@@ -973,6 +1004,7 @@ test("groups a continuous TIC temperature run as dEnv", async () => {
   assert.equal(result.alerts[0].timestamp, "2026-05-26 13:46:01.154");
   assert.equal(result.alerts[0].endTimestamp, "2026-05-26 13:48:55.275");
   assert.equal(result.alerts[0].messages.length, 2);
+  assert.equal(result.alerts[0].note, "TIC temperature spread × 2");
 
   const highlighted = context.errorAnalyzerTestApi.highlightErrorAnalyzerMessage(
     result.alerts[0].messages[0],

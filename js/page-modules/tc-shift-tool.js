@@ -1376,7 +1376,7 @@ function bindOffsetCalculator(stats) {
       stats.yMin !== null
     ) {
       const yNewOffset = ((stats.yMax + stats.yMin) / 2) * ySlope + yOffset;
-      yNewOffsetOutput.textContent = formatNumber(yNewOffset, 2);
+      yNewOffsetOutput.textContent = String(Math.round(yNewOffset));
     } else {
       yNewOffsetOutput.textContent = "--";
     }
@@ -1388,7 +1388,7 @@ function bindOffsetCalculator(stats) {
       stats.xMin !== null
     ) {
       const xNewOffset = ((stats.xMax + stats.xMin) / 2) * xSlope + xOffset;
-      xNewOffsetOutput.textContent = formatNumber(xNewOffset, 2);
+      xNewOffsetOutput.textContent = String(Math.round(xNewOffset));
     } else {
       xNewOffsetOutput.textContent = "--";
     }
@@ -1495,7 +1495,7 @@ function buildTcShiftChartSectionHtml() {
         </div>
       </div>
 
-      <div class="chart-canvas-wrap">
+      <div class="chart-canvas-wrap tc-shift-chart-wrap">
         <canvas id="tcShiftChartCanvas" width="1200" height="560"></canvas>
       </div>
     </section>
@@ -1906,7 +1906,7 @@ function drawTcShiftChart() {
   drawChartAxes(ctx, padding, plotWidth, plotHeight);
 
   ctx.fillStyle = "#555";
-  ctx.font = "13px Segoe UI";
+  ctx.font = "18px Segoe UI";
   ctx.textAlign = "center";
   ctx.fillText(xAxisTitle, padding.left + plotWidth / 2, height - 18);
 
@@ -1965,7 +1965,7 @@ function drawChartGrid(ctx, config) {
 
     ctx.setLineDash([]);
     ctx.fillStyle = "#888";
-    ctx.font = "12px Segoe UI";
+    ctx.font = "16px Segoe UI";
     ctx.textAlign = "center";
 
     if (xAxisType === "time") {
@@ -1988,7 +1988,7 @@ function drawChartGrid(ctx, config) {
 
     ctx.setLineDash([]);
     ctx.fillStyle = "#888";
-    ctx.font = "12px Segoe UI";
+    ctx.font = "16px Segoe UI";
     ctx.textAlign = "right";
     ctx.fillText(roundForAxis(value), padding.left - 10, y + 4);
     ctx.setLineDash([4, 4]);
@@ -2043,7 +2043,7 @@ function drawThresholdLine(ctx, config) {
 
   ctx.setLineDash([]);
   ctx.fillStyle = "rgba(180, 30, 30, 0.9)";
-  ctx.font = "12px Segoe UI";
+  ctx.font = "15px Segoe UI";
   ctx.textAlign = "left";
   ctx.fillText(label, padding.left + 8, y - 6);
 
@@ -2133,13 +2133,13 @@ function drawChartTooltip(ctx, point, canvasWidth, canvasHeight) {
   const lines = [
     `Time: ${formatFullTimestamp(point.shiftTimeMs)}`,
     `Angle: ${trimTrailingZeros(point.angle)}°`,
-    `Type: ${point.isNearbyAngle ? "Nearby" : "Target"}`,
+    ...(point.isNearbyAngle ? ["Type: Nearby"] : []),
     `Y shift: ${point.yShift === "" ? "--" : formatNumber(point.yShift, 6)}`,
     `X shift: ${point.xShift === "" ? "--" : formatNumber(point.xShift, 6)}`
   ];
 
   ctx.save();
-  ctx.font = "12px Segoe UI";
+  ctx.font = "15px Segoe UI";
 
   let maxWidth = 0;
   for (const line of lines) {
@@ -2148,7 +2148,8 @@ function drawChartTooltip(ctx, point, canvasWidth, canvasHeight) {
   }
 
   const boxWidth = maxWidth + 20;
-  const boxHeight = lines.length * 18 + 16;
+  const lineHeight = 21;
+  const boxHeight = lines.length * lineHeight + 16;
 
   let boxX = point.canvasX + 12;
   let boxY = point.canvasY - boxHeight - 12;
@@ -2173,7 +2174,7 @@ function drawChartTooltip(ctx, point, canvasWidth, canvasHeight) {
   ctx.textAlign = "left";
 
   lines.forEach((line, index) => {
-    ctx.fillText(line, boxX + 10, boxY + 18 + index * 18);
+    ctx.fillText(line, boxX + 10, boxY + 20 + index * lineHeight);
   });
 
   ctx.restore();

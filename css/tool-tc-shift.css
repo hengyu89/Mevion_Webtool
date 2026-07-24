@@ -450,6 +450,15 @@
   display: block;
 }
 
+.tc-shift-chart-wrap,
+#tcShiftChartCanvas {
+  width: 960px;
+  max-width: 960px;
+  min-width: 960px;
+  height: 448px;
+  max-height: 448px;
+}
+
 @media (max-width: 1400px) {
   .tc-table-stats-layout,
   .tc-main-layout,
@@ -864,12 +873,12 @@ input[type="checkbox"] {
   display: block !important;
   width: 106px !important;
   padding: 6px 7px !important;
-  color: #075e20 !important;
-  background: #c7e8c9 !important;
-  border-top: 1px solid #5c9d65 !important;
-  border-left: 1px solid #5c9d65 !important;
-  border-right: 1px solid #f5fff6 !important;
-  border-bottom: 1px solid #f5fff6 !important;
+  color: #24465c !important;
+  background: #dbe7ef !important;
+  border-top: 1px solid #6f8fa5 !important;
+  border-left: 1px solid #6f8fa5 !important;
+  border-right: 1px solid #f7fbfd !important;
+  border-bottom: 1px solid #f7fbfd !important;
   font-size: 14px !important;
   font-weight: 900 !important;
 }

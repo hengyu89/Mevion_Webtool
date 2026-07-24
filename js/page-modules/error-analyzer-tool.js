@@ -40,7 +40,7 @@ const ERROR_ANALYZER_AA_POSITION_MISMATCH_RE = /\bPosition mismatch error:\s*([0
 const ERROR_ANALYZER_AA_INTERRUPT_RE =
   /\bACM interrupt received in error state\..*?\bbits:\s*([01](?:\|[01]{4}){4})\b/i;
 const ERROR_ANALYZER_AA_AXIS_STATUS_RE = /^((?:A|B[12]|C[12][A-G]))\s*\(Node\s+\d+\).*?\berr\.\s*:/i;
-const ERROR_ANALYZER_RS_PLATE_FAULT_RE = /ERROR-(47003|47006|47014)\b/i;
+const ERROR_ANALYZER_RS_PLATE_FAULT_RE = /ERROR-(47003|47006|47012|47014)\b/i;
 const ERROR_ANALYZER_TIC_TEMPERATURE_RE = /ERROR-5029\b.*?\bTIC temperature spread out of tolerance\b/i;
 const ERROR_ANALYZER_TIC_PRESSURE_RE = /ERROR-5030\b.*?\bTIC pressure spread out of tolerance\b/i;
 const ERROR_ANALYZER_TIC_ENVIRONMENT_RE =
@@ -1230,7 +1230,7 @@ function mergeErrorAnalyzerPlateFaultBursts(alerts) {
         !isErrorAnalyzerPlateFault(candidate) ||
         !Number.isFinite(elapsed) ||
         elapsed < 0 ||
-        elapsed > 2000
+        elapsed > 30 * 1000
       ) {
         break;
       }
@@ -1238,7 +1238,7 @@ function mergeErrorAnalyzerPlateFaultBursts(alerts) {
       cursor += 1;
     }
 
-    if (group.length < 4) {
+    if (group.length < 2) {
       merged.push(...group);
       index = cursor;
       continue;
@@ -1260,6 +1260,7 @@ function isErrorAnalyzerPlateFault(alert) {
 
 function combineErrorAnalyzerPlateFaultBurst(group) {
   const first = group[0];
+  const last = group[group.length - 1];
   const messages = group.flatMap((alert) => alert.messages || [alert.message]).filter(Boolean);
   const typeLabels = Array.from(
     new Set(
@@ -1272,6 +1273,12 @@ function combineErrorAnalyzerPlateFaultBurst(group) {
   const plates = Array.from(
     new Set(messages.map((message) => String(message).match(/\bPlate\s+(\d+)\b/i)?.[1]).filter(Boolean))
   ).sort((left, right) => Number(left) - Number(right));
+  const plateSummary =
+    plates.length === 1
+      ? `Plate ${plates[0]}`
+      : plates.length > 1
+        ? plates.map((plate) => `Plate ${plate}`).join(" / ")
+        : "";
 
   return {
     ...first,
@@ -1279,7 +1286,8 @@ function combineErrorAnalyzerPlateFaultBurst(group) {
     typeLabels,
     message: messages.join("\n"),
     messages,
-    note: plates.length ? `RS plate faults - ${plates.length} plates` : "RS plate faults",
+    endTimestamp: last.timestamp,
+    note: `RS plate fault${plateSummary ? ` - ${plateSummary}` : ""} × ${messages.length}`,
     incidentKind: "plateFaultBurst",
     relatedRows: group.reduce((total, alert) => total + Number(alert.relatedRows || 1), 0)
   };
@@ -1504,7 +1512,7 @@ function combineErrorAnalyzerEnvironmentRun(group) {
     endTimestamp: last.timestamp,
     message: messages.join("\n"),
     messages,
-    note: `TIC ${displayName} spread`,
+    note: `TIC ${displayName} spread × ${messages.length}`,
     incidentKind: kind === "temperature" ? "ticTemperatureRun" : "ticPressureRun",
     relatedRows: group.reduce((total, { alert }) => total + Number(alert.relatedRows || 1), 0)
   };
