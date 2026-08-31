@@ -518,6 +518,9 @@ function updatePatientRecord(patientMap, patientId, data) {
   const record = ensurePatientRecord(patientMap, patientId, data);
   if (!record) return;
   if (data.source === "Plan Open") record.hasPlanOpen = true;
+  if (data.source === "Treatment Record" && Number.isFinite(data.endTimeMs)) {
+    record.lastTreatmentRecordTimeMs = Math.max(record.lastTreatmentRecordTimeMs ?? -Infinity, data.endTimeMs);
+  }
 
   if (Number.isFinite(data.fraction)) {
     record.fractions.add(Number(data.fraction));
@@ -599,7 +602,8 @@ function renderPatientCounterTableAndSummary() {
   patientCounterState.currentPage = currentPage;
   const start = (currentPage - 1) * pageSize;
   const pageRows = rows.slice(start, start + pageSize);
-  const uncertainCount = rows.filter((row) => !row.hasPlanOpen || row.startInferred || row.source !== "Treatment Record").length;
+  const recordNotices = rows.map((row, index) => ({ row, index, reasons: getPatientRecordNotices(row) }))
+    .filter((item) => item.reasons.length);
 
   summary.innerHTML = `
     <div class="summary-row patient-summary-row">
@@ -623,7 +627,11 @@ function renderPatientCounterTableAndSummary() {
         <button id="patientLogicBtn" class="tool-btn pagination-btn" type="button" aria-haspopup="dialog">提取逻辑</button>
       </div>
     </div>
-    ${uncertainCount ? `<div class="patient-data-notice">${uncertainCount} 位病人缺少计划打开或最终 Treatment Record：带 ≈ 的开始时间由 SESSION 路径推定；结束时间仅代表日志中最后可见记录。射野也可能不完整，请勿视为完整治疗统计。</div>` : ""}
+    ${recordNotices.length ? `<details class="patient-data-notice" open>
+      <summary>${recordNotices.length} 位病人的记录边界需核对（Patient ID 与具体原因）</summary>
+      <ul>${recordNotices.map(({ row, index, reasons }) => `<li>第 ${index + 1} 行 · Patient ID <strong>${escapePatientHtml(row.patientId)}</strong> · ${escapePatientHtml(row.fractionDisplay || "Frac 未知")}：${escapePatientHtml(reasons.join("；"))}。</li>`).join("")}</ul>
+      <div>这是本次导入范围内的记录情况，不代表日志丢失或治疗异常；后续消息可能在下一份日志中。未确认最终记录时，表格结束时间仅代表最后可见的剂量/治疗记录。</div>
+    </details>` : ""}
   `;
 
   if (!rows.length) {
@@ -707,6 +715,21 @@ function bindPatientPaginationEvents(totalPages) {
       renderPatientCounterTableAndSummary();
     });
   }
+}
+
+function getPatientRecordNotices(row) {
+  const reasons = [];
+  if (!row.hasPlanOpen || row.startInferred) {
+    reasons.push(row.startInferred
+      ? `未识别到对应计划打开消息，开始时间由 SESSION 路径推定（≈ ${formatPatientTimeOnly(row.startTimestamp)}）`
+      : "未识别到计划打开消息，无法确认实际开始时间");
+  }
+  if (!Number.isFinite(row.lastTreatmentRecordTimeMs)) {
+    reasons.push("未识别到该病人的最终 Treatment Record 消息");
+  } else if (Number.isFinite(row.endTimeMs) && row.lastTreatmentRecordTimeMs < row.endTimeMs) {
+    reasons.push("最后一条剂量记录之后未识别到新的 Treatment Record 消息");
+  }
+  return reasons;
 }
 
 function showPatientExtractionLogic() {

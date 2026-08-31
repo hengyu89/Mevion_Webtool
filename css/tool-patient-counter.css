@@ -60,6 +60,8 @@
 }
 
 #patientSummary.tool-summary { display: block !important; }
+.patient-data-notice summary { cursor: pointer; font-weight: 700; }
+.patient-data-notice ul { margin: 5px 0; padding-left: 22px; }
 
 .patient-results-layout {
   display: flex;

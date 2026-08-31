@@ -196,3 +196,25 @@ test("an observed plan start takes priority over the rounded SESSION path time",
   assert.equal(patients[0].startInferred, false);
   assert.equal(patients[0].hasPlanOpen, true);
 });
+
+test("a log ending after dosimetry reports only the missing final record, not an inferred start", async () => {
+  const patients = await context.parsePatientCounterFiles([file([
+    plan("17:35", "100001"),
+    row("17:48", "Saving dosimetry record at /exams/100001/SESSION_20260831173500/Beam4Frac4.csv"),
+    row("17:49", "Beam number: 3")
+  ])]);
+  const reasons = Array.from(context.getPatientRecordNotices(patients[0]));
+  assert.deepEqual(reasons, ["未识别到该病人的最终 Treatment Record 消息"]);
+  assert.equal(patients[0].startInferred, false);
+});
+
+test("final-record checks use actual record timestamps rather than the displayed source label", async () => {
+  const patients = await context.parsePatientCounterFiles([file([
+    plan("07:00", "100001"), record("07:10", "100001", 1),
+    row("07:10", "Saving dosimetry record at /exams/100001/Beam2Frac1.csv")
+  ])]);
+  assert.equal(patients[0].source, "Dosimetry Record");
+  assert.equal(context.getPatientRecordNotices(patients[0]).length, 0);
+  patients[0].endTimeMs += 1000;
+  assert.match(context.getPatientRecordNotices(patients[0])[0], /最后一条剂量记录之后/);
+});
