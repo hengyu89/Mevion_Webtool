@@ -32,11 +32,17 @@ const pageContent = {
     },
     sections: [
       {
-        title: "更新内容 v.2.1.1 — 2026/7/24",
+        title: "更新内容 v.2.1.4 — 2026/8/31",
         type: "text",
         content:
-          "1. 首页 UI 更新；<br>2. 在<strong>首页</strong>添加 Bomgar 和 Notepad++ 的常用搜索关键词，按<strong>右侧复制图标</strong>可快捷复制；<br>3. 添加常用工具 Error Analyzer，可筛选绝大多数 TC Logs 报错（如 Heap Free、Kuka Offline 等）；<br>4. 添加常用工具 No Scanning Analyzer，可绘制 Position 与 Sigma 图表，用于趋势分析。",
+          "1. 四个 TC Logs 工具兼容 HALO CSV（TC Datetime、多行 message）；<br>2. Patient Counter 合并起止时间、增加治疗野数与「提取逻辑」说明；<br>3. 保留 Kuka 锁存周期合并、无表头日志及连续导入修复。",
         history: [
+          {
+            version: "v2.1.1",
+            date: "2026/7/24",
+            content:
+              "1. 首页 UI 更新；<br>2. 在<strong>首页</strong>添加 Bomgar 和 Notepad++ 的常用搜索关键词，按<strong>右侧复制图标</strong>可快捷复制；<br>3. 添加常用工具 Error Analyzer，可筛选绝大多数 TC Logs 报错（如 Heap Free、Kuka Offline 等）；<br>4. 添加常用工具 No Scanning Analyzer，可绘制 Position 与 Sigma 图表，用于趋势分析。"
+          },
           {
             version: "v2.0.1",
             date: "2026/7/1",

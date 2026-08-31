@@ -1,5 +1,6 @@
 ﻿const ticSweepState = {
   analysis: null,
+  analysisVersion: 0,
   pulseIndex: 1,
   scatterVisible: {
     ticSweepScatterInplane: {},
@@ -97,12 +98,14 @@ function bindTicSweepEvents() {
 }
 
 async function analyzeTicSweepFile(file) {
+  const version = ++ticSweepState.analysisVersion;
   const status = document.getElementById("ticSweepStatus");
   const startTime = performance.now();
   setTicSweepStatus(`正在分析 ${file.name} ...`, "running");
 
   try {
     const text = await file.text();
+    if (version !== ticSweepState.analysisVersion) return;
     const analysis = parseTicSweepTreatmentRecord(text, file.name);
     ticSweepState.analysis = analysis;
     ticSweepState.pulseIndex = 1;
@@ -115,6 +118,7 @@ async function analyzeTicSweepFile(file) {
       "done"
     );
   } catch (error) {
+    if (version !== ticSweepState.analysisVersion) return;
     console.error(error);
     ticSweepState.analysis = null;
     if (status) status.textContent = "";

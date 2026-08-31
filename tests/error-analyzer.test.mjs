@@ -92,6 +92,24 @@ test("identifies the malformed file when a batch cannot be parsed", async () => 
   );
 });
 
+test("HALO aliases preserve local time, multiline CSV, code lines and unordered time ranges", async () => {
+  const csv = [
+    "TC Datetime,Severity,Source,Subsystem,Category,MCC Datetime,Message Text,Extra Text,Code Line",
+    '2026-08-31 10:00:00.000,INFO,MCC,TEST,NO_ERROR,2026-08-31 02:00:00.000,"Ordinary message with ""quotes""\n2029-01-01 00:00:00.000,embedded text",test.cpp,1',
+    '2026-08-31 12:00:00.000,INFO,MCC,TEST,NO_ERROR,2026-08-31 04:00:00.000,Ordinary final event,test.cpp,2',
+    '2026-08-31 11:00:00.000,INFO,MCC,STATE_MANAGER,NO_ERROR,2026-08-31 03:00:00.000,Logging Abnormal Termination Condition: TREATMENT_TIME_LIMIT in CLINICAL,WorkflowManager.cpp,1007',
+    '1970-01-01 08:00:00.000,INFO,MCC,TEST,NO_ERROR,1970-01-01 00:00:00.000,Clock not initialized,test.cpp,3',
+    '2026-08-31 07:00:00.000,INFO,MCC,TEST,NO_ERROR,2026-08-30 23:00:00.000,Ordinary first event,test.cpp,4'
+  ].join("\n");
+  const result = await context.errorAnalyzerTestApi.parseErrorAnalyzerFiles([mockFile("HALO.csv", csv)]);
+  assert.equal(result.parsedRows, 5);
+  assert.equal(result.alerts.length, 1);
+  assert.equal(result.timeRange.start, "2026-08-31 07:00:00.000");
+  assert.equal(result.timeRange.end, "2026-08-31 12:00:00.000");
+  assert.equal(result.alerts[0].timestamp, "2026-08-31 11:00:00.000");
+  assert.equal(result.alerts[0].extra, "WorkflowManager.cpp: 1007");
+});
+
 test("merges ERROR-46018 with its range-shifter abnormal termination", async () => {
   const csv = makeCsv([
     '2026-07-22 16:20:07.043,WARNING,XYZ_SW,XYZ_PCM,DEVICE_ERROR,2026-07-22 08:20:07.043,"ERROR-46018: Plate motion error on pulse 2755. Plate motion error on plate(s) 17. [Interrupt]",XYZ_Controller.cpp',
@@ -547,11 +565,22 @@ test("waits for recovery before accepting the final Kuka communications clear", 
   assert.equal(result.alerts[0].messages.filter((message) => /became LATCHED/.test(message)).length, 1);
 });
 
-test("uses unsatisfied and satisfied as Kuka outage boundary fallbacks", async () => {
+test("uses recovery as a fallback when the selected logs have no Kuka clear", async () => {
   const csv = makeCsv([
     '2026-07-05 09:16:14.776,INFO,MCC,TREATMENT_SPACE,NO_ERROR,2026-07-05 01:16:14.776,"IL_PLC_TO_KUKA_COMMS became unsatisfied (KRC4 mode). CIM PCM Online=FALSE, Kuka Online=FALSE",treatment_space_control.cpp',
     '2026-07-05 09:16:14.791,INFO,MCC,null,NO_ERROR,2026-07-05 01:16:14.791,"IL_PLC_TO_KUKA_COMMS became LATCHED. (Type 2)",interlock_manager.cpp',
-    '2026-07-05 09:17:42.781,INFO,MCC,TREATMENT_SPACE,NO_ERROR,2026-07-05 01:17:42.781,"IL_PLC_TO_KUKA_COMMS became satisfied (KRC4 mode).",treatment_space_control.cpp',
+    '2026-07-05 09:17:42.781,INFO,MCC,TREATMENT_SPACE,NO_ERROR,2026-07-05 01:17:42.781,"IL_PLC_TO_KUKA_COMMS became satisfied (KRC4 mode).",treatment_space_control.cpp'
+  ]);
+  const result = await context.errorAnalyzerTestApi.parseErrorAnalyzerFiles([mockFile("TCLogger.csv", csv)]);
+  assert.equal(result.alerts.length, 1);
+  assert.equal(result.alerts[0].timestamp, "2026-07-05 09:16:14.791");
+  assert.equal(result.alerts[0].endTimestamp, "2026-07-05 09:17:42.781");
+  assert.match(result.alerts[0].messages[0], /became LATCHED/);
+  assert.match(result.alerts[0].messages[1], /became satisfied/);
+});
+
+test("uses unsatisfied as a fallback when the selected logs have no Kuka latch", async () => {
+  const csv = makeCsv([
     '2026-07-05 09:37:50.511,INFO,MCC,TREATMENT_SPACE,NO_ERROR,2026-07-05 01:37:50.511,"IL_PLC_TO_KUKA_COMMS became unsatisfied (KRC4 mode). CIM PCM Online=FALSE, Kuka Online=FALSE",treatment_space_control.cpp',
     '2026-07-05 09:39:08.301,INFO,MCC,TREATMENT_SPACE,NO_ERROR,2026-07-05 01:39:08.301,"IL_PLC_TO_KUKA_COMMS became satisfied (KRC4 mode).",treatment_space_control.cpp',
     '2026-07-05 09:42:09.310,INFO,MCC,null,NO_ERROR,2026-07-05 01:42:09.310,"IL_PLC_TO_KUKA_COMMS became UN-LATCHED",interlock_manager.cpp'
@@ -559,15 +588,93 @@ test("uses unsatisfied and satisfied as Kuka outage boundary fallbacks", async (
 
   const result = await context.errorAnalyzerTestApi.parseErrorAnalyzerFiles([mockFile("TCLogger.csv", csv)]);
 
+  assert.equal(result.alerts.length, 1);
+  assert.equal(result.alerts[0].timestamp, "2026-07-05 09:37:50.511");
+  assert.equal(result.alerts[0].endTimestamp, "2026-07-05 09:42:09.310");
+  assert.match(result.alerts[0].messages[0], /became unsatisfied/);
+  assert.match(result.alerts[0].messages[1], /became UN-LATCHED/);
+});
+
+function kukaRow(time, state) {
+  const messages = {
+    down: "IL_PLC_TO_KUKA_COMMS became unsatisfied (KRC4 mode). CIM PCM Online=FALSE, Kuka Online=FALSE",
+    latch: "IL_PLC_TO_KUKA_COMMS became LATCHED. (Type 2)",
+    up: "IL_PLC_TO_KUKA_COMMS became satisfied (KRC4 mode).",
+    clear: "IL_PLC_TO_KUKA_COMMS became UN-LATCHED"
+  };
+  return `2026-08-31 ${time},INFO,MCC,TREATMENT_SPACE,NO_ERROR,2026-08-31 ${time},"${messages[state]}",test.cpp`;
+}
+
+test("keeps all four communications drops inside the August 31 latch as one outage", async () => {
+  const rows = [
+    kukaRow("17:38:09.614", "down"), kukaRow("17:38:09.664", "latch"),
+    kukaRow("17:38:11.004", "up"), kukaRow("17:38:15.614", "down"),
+    kukaRow("17:38:18.404", "up"), kukaRow("17:38:23.604", "down"),
+    kukaRow("17:38:28.004", "up"), kukaRow("17:38:32.609", "down"),
+    '2026-08-31 17:39:00.000,INFO,MCC,STATE_MANAGER,NO_ERROR,2026-08-31 09:39:00.000,"Logging Abnormal Termination Condition: TREATMENT_TIME_LIMIT in CLINICAL",test.cpp',
+    kukaRow("17:39:46.004", "up"), kukaRow("17:39:53.914", "clear")
+  ];
+  const result = await context.errorAnalyzerTestApi.parseErrorAnalyzerFiles([mockFile("sample.csv", makeCsv(rows))]);
+  const outages = result.alerts.filter((alert) => alert.incidentKind === "kukaCommsOutage");
+  assert.equal(outages.length, 1);
+  assert.equal(outages[0].timestamp, "2026-08-31 17:38:09.664");
+  assert.equal(outages[0].endTimestamp, "2026-08-31 17:39:53.914");
+  assert.equal(outages[0].relatedRows, 10);
+  assert.equal(outages[0].messages.length, 2);
+  assert.match(outages[0].messages[0], /became LATCHED/);
+  assert.match(outages[0].messages[1], /became UN-LATCHED/);
+  assert.ok(result.alerts.some((alert) => alert.ruleLabel === "dTime"));
+});
+
+test("pairs latch-only boundaries across rollover files even beyond ten minutes", async () => {
+  const result = await context.errorAnalyzerTestApi.parseErrorAnalyzerFiles([
+    mockFile("later.csv", kukaRow("18:10:00.000", "clear")),
+    mockFile("earlier.csv", makeCsv([kukaRow("17:38:09.664", "latch")]))
+  ]);
+  assert.equal(result.alerts.length, 1);
+  assert.equal(result.alerts[0].timestamp, "2026-08-31 17:38:09.664");
+  assert.equal(result.alerts[0].endTimestamp, "2026-08-31 18:10:00.000");
+  assert.equal(result.alerts[0].messages.length, 2);
+});
+
+test("does not merge two complete latch cycles", async () => {
+  const result = await context.errorAnalyzerTestApi.parseErrorAnalyzerFiles([mockFile("sample.csv", makeCsv([
+    kukaRow("17:38:00.000", "latch"), kukaRow("17:39:00.000", "clear"),
+    kukaRow("17:40:00.000", "latch"), kukaRow("17:41:00.000", "clear")
+  ]))]);
   assert.equal(result.alerts.length, 2);
-  assert.equal(result.alerts[0].timestamp, "2026-07-05 09:16:14.791");
-  assert.equal(result.alerts[0].endTimestamp, "2026-07-05 09:17:42.781");
-  assert.match(result.alerts[0].messages[0], /became LATCHED/);
-  assert.match(result.alerts[0].messages[1], /became satisfied/);
-  assert.equal(result.alerts[1].timestamp, "2026-07-05 09:37:50.511");
-  assert.equal(result.alerts[1].endTimestamp, "2026-07-05 09:42:09.310");
-  assert.match(result.alerts[1].messages[0], /became unsatisfied/);
-  assert.match(result.alerts[1].messages[1], /became UN-LATCHED/);
+  assert.equal(result.alerts[0].endTimestamp, "2026-08-31 17:39:00.000");
+  assert.equal(result.alerts[1].timestamp, "2026-08-31 17:40:00.000");
+});
+
+test("does not report an earlier recovery as the end after communications drop again", async () => {
+  const result = await context.errorAnalyzerTestApi.parseErrorAnalyzerFiles([mockFile("sample.csv", makeCsv([
+    kukaRow("17:38:00.000", "latch"), kukaRow("17:39:00.000", "up"),
+    kukaRow("17:40:00.000", "down")
+  ]))]);
+  assert.equal(result.alerts.length, 1);
+  assert.equal(result.alerts[0].endTimestamp, "");
+  assert.equal(result.alerts[0].messages.length, 1);
+});
+
+test("a new latch separates incidents when the previous clear is missing", async () => {
+  const result = await context.errorAnalyzerTestApi.parseErrorAnalyzerFiles([mockFile("sample.csv", makeCsv([
+    kukaRow("17:38:00.000", "latch"), kukaRow("17:39:00.000", "up"),
+    kukaRow("17:40:00.000", "latch"), kukaRow("17:41:00.000", "clear")
+  ]))]);
+  assert.equal(result.alerts.length, 2);
+  assert.equal(result.alerts[0].endTimestamp, "2026-08-31 17:39:00.000");
+  assert.equal(result.alerts[1].timestamp, "2026-08-31 17:40:00.000");
+});
+
+test("keeps separate recovery cycles when neither latch boundary is logged", async () => {
+  const result = await context.errorAnalyzerTestApi.parseErrorAnalyzerFiles([mockFile("sample.csv", makeCsv([
+    kukaRow("17:38:00.000", "down"), kukaRow("17:39:00.000", "up"),
+    kukaRow("17:40:00.000", "down"), kukaRow("17:41:00.000", "up")
+  ]))]);
+  assert.equal(result.alerts.length, 2);
+  assert.equal(result.alerts[0].endTimestamp, "2026-08-31 17:39:00.000");
+  assert.equal(result.alerts[1].endTimestamp, "2026-08-31 17:41:00.000");
 });
 
 test("loads the complete 37022R13 catalog and SAF19-JA4 descriptions", () => {

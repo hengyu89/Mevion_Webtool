@@ -29,7 +29,7 @@ function initPatientCounterToolPage() {
       <div id="patientDropZone" class="file-drop-zone patient-drop-zone">
         <input id="patientFileInput" class="file-input-hidden" type="file" accept=".csv" multiple />
         <div class="file-drop-title">点击或拖拽文件到此处</div>
-        <div class="file-drop-subtitle">支持格式: .csv，可一次选择多个 TCLogger 文件</div>
+        <div class="file-drop-subtitle">支持格式: .csv，可一次选择多个 TCLogger / HALO 文件</div>
       </div>
 
       <div id="patientFileStatus" class="tool-file-list empty-text">尚未选择文件。</div>
@@ -48,6 +48,7 @@ function bindPatientCounterEvents() {
 
   let selectedFiles = [];
   let loadedFileKey = "";
+  let analysisVersion = 0;
 
   function setStatus(message, type = "idle") {
     const status = document.getElementById("patientFileStatus");
@@ -58,7 +59,13 @@ function bindPatientCounterEvents() {
   }
 
   async function analyzeSelectedFiles() {
-    if (!selectedFiles.length) {
+    const version = ++analysisVersion;
+    const files = selectedFiles.slice();
+    const fileKey = loadedFileKey;
+    // A different tool can replace the shared files while this page is reading.
+    const isCurrent = () => version === analysisVersion &&
+      (!window.TcLogFileStore || window.TcLogFileStore.getFileKey() === fileKey);
+    if (!files.length) {
       setStatus("尚未选择文件。", "idle");
       return;
     }
@@ -66,12 +73,13 @@ function bindPatientCounterEvents() {
     const startTime = performance.now();
 
     setStatus(
-      `已选择 ${selectedFiles.length} 份文件，正在分析... (0/${selectedFiles.length})`,
+      `已选择 ${files.length} 份文件，正在分析... (0/${files.length})`,
       "running"
     );
 
     try {
-      const rows = await parsePatientCounterFiles(selectedFiles, (done, total, currentFileName) => {
+      const rows = await parsePatientCounterFiles(files, (done, total, currentFileName) => {
+        if (!isCurrent()) return;
         const shortName = shortenPatientFileName(currentFileName);
         setStatus(
           `已选择 ${total} 份文件，正在分析... (${done}/${total})。当前文件: ${shortName}`,
@@ -79,15 +87,18 @@ function bindPatientCounterEvents() {
         );
       });
 
+      if (!isCurrent()) return;
       renderPatientCounterResults(rows);
 
       const newCount = rows.filter((row) => row.isNew).length;
       const elapsedMs = performance.now() - startTime;
       setStatus(
-        `共 ${selectedFiles.length} 份文件，耗时 ${formatPatientElapsed(elapsedMs)}，分析完成！共 ${rows.length} 个病人，其中 ${newCount} 个 Frac 1。`,
+        `共 ${files.length} 份文件，耗时 ${formatPatientElapsed(elapsedMs)}，分析完成！共 ${rows.length} 个病人，其中 ${newCount} 个 Frac 1。`,
         "done"
       );
     } catch (error) {
+      if (!isCurrent()) return;
+      loadedFileKey = "";
       console.error(error);
       setStatus(`分析失败：${error.message}`, "error");
       alert(`分析失败：${error.message}`);
@@ -147,6 +158,7 @@ async function parsePatientCounterFiles(files, onProgress) {
   const patientMap = new Map();
   const context = {
     currentPatientId: "",
+    pendingRecords: [],
     patientStartById: new Map(),
     currentPlanStartById: new Map()
   };
@@ -164,6 +176,13 @@ async function parsePatientCounterFiles(files, onProgress) {
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
 
+  // HALO exports and overlapping files may not be in chronological order.
+  // Only retain candidate messages, then resolve patient context in TC time order.
+  context.pendingRecords.sort((a, b) => a.tcTimeMs - b.tcTimeMs);
+  for (const record of context.pendingRecords) {
+    applyPatientCounterMessage(record, patientMap, context);
+  }
+
   return Array.from(patientMap.values())
     .map((item) => {
       const fractions = Array.from(item.fractions || [])
@@ -178,6 +197,7 @@ async function parsePatientCounterFiles(files, onProgress) {
       return {
         ...item,
         beams,
+        treatmentFieldCount: countPatientTreatmentFields(beams),
         fractions,
         fraction: fractions.length ? Math.max(...fractions) : "",
         fractionDisplay: formatPatientFractionRange(fractions),
@@ -225,64 +245,28 @@ function getPatientFileSortTime(file) {
 }
 
 async function parsePatientCounterFileStream(file, patientMap, context, sourceFileName) {
-  if (!file.stream || typeof TextDecoder === "undefined") {
-    const text = await file.text();
-    parsePatientCounterTextDirect(text, patientMap, context, sourceFileName);
-    return;
-  }
-
-  const reader = file.stream().getReader();
-  const decoder = new TextDecoder("utf-8");
-  let buffer = "";
   let headerIndexes = null;
-
-  try {
-    while (true) {
-      const { value, done } = await reader.read();
-      buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
-
-      let lineBreakIndex = buffer.indexOf("\n");
-      while (lineBreakIndex !== -1) {
-        const line = buffer.slice(0, lineBreakIndex).replace(/\r$/, "");
-        buffer = buffer.slice(lineBreakIndex + 1);
-        headerIndexes = parsePatientCounterRelevantLine(line, headerIndexes, patientMap, context, sourceFileName);
-        lineBreakIndex = buffer.indexOf("\n");
-      }
-
-      if (done) break;
-    }
-
-    if (buffer) {
-      headerIndexes = parsePatientCounterRelevantLine(buffer.replace(/\r$/, ""), headerIndexes, patientMap, context, sourceFileName);
-    }
-  } finally {
-    reader.releaseLock();
-  }
+  await window.CsvUtils.readFileRecords(file, (line) => {
+    headerIndexes = parsePatientCounterRelevantLine(line, headerIndexes, patientMap, context, sourceFileName);
+  });
 }
 
 function parsePatientCounterTextDirect(text, patientMap, context, sourceFileName) {
   let headerIndexes = null;
-  let start = text.charCodeAt(0) === 0xfeff ? 1 : 0;
-
-  for (let i = start; i <= text.length; i += 1) {
-    if (i === text.length || text[i] === "\n") {
-      const line = text.slice(start, i).replace(/\r$/, "");
-      headerIndexes = parsePatientCounterRelevantLine(line, headerIndexes, patientMap, context, sourceFileName);
-      start = i + 1;
-    }
-  }
+  window.CsvUtils.forEachRecord(text, (line) => {
+    headerIndexes = parsePatientCounterRelevantLine(line, headerIndexes, patientMap, context, sourceFileName);
+  });
 }
 
 function parsePatientCounterRelevantLine(line, headerIndexes, patientMap, context, sourceFileName) {
   if (!line) return headerIndexes;
 
   if (!headerIndexes) {
-    const cleanLine = line.replace(/^\uFEFF/, "");
-    const header = parsePatientCsvLine(cleanLine);
-    return {
-      timestamp: header.indexOf("TC Timestamp"),
-      message: header.indexOf("Message Text")
-    };
+    const columns = parsePatientCsvLine(line.replace(/^\uFEFF/, ""));
+    if (columns.every((value) => !String(value).trim())) return null;
+    const header = window.CsvUtils.resolveTcLogHeader(columns);
+    headerIndexes = header.indexes;
+    if (!header.isData) return headerIndexes;
   }
 
   if (
@@ -299,11 +283,20 @@ function parsePatientCounterRelevantLine(line, headerIndexes, patientMap, contex
   const tcTimestamp = cols[headerIndexes.timestamp] || "";
   const message = cols[headerIndexes.message] || "";
   const tcTimeMs = parsePatientTimestamp(tcTimestamp);
+  if (!Number.isFinite(tcTimeMs)) return headerIndexes;
+  const record = { tcTimestamp, tcTimeMs, message, sourceFileName };
+  if (context.pendingRecords) context.pendingRecords.push(record);
+  else applyPatientCounterMessage(record, patientMap, context);
+  return headerIndexes;
+}
+
+function applyPatientCounterMessage({ tcTimestamp, tcTimeMs, message, sourceFileName }, patientMap, context) {
 
   const planOpenMatch = message.match(/Saving DICOM file\s*\([^)]*\/exams\/([A-Za-z0-9_-]+)\/Debug\/BDI[^)]*/i);
   if (planOpenMatch) {
     const patientId = planOpenMatch[1];
-    if (!isValidRealPatientId(patientId)) return headerIndexes;
+    context.currentPatientId = "";
+    if (!isValidRealPatientId(patientId)) return;
     context.currentPatientId = patientId;
 
     const existingStart = context.patientStartById.get(patientId);
@@ -334,9 +327,12 @@ function parsePatientCounterRelevantLine(line, headerIndexes, patientMap, contex
   const dosrecMatch = message.match(/Saving dosimetry record at\s+([^"]*?Frac(\d+)\.csv)/i);
   if (dosrecMatch) {
     const dosrecPath = dosrecMatch[1] || "";
-    const pathPatientMatch = dosrecPath.match(/\/exams\/(\d{6,})\//i);
-    const patientId = context.currentPatientId || (pathPatientMatch ? pathPatientMatch[1] : "");
-    if (!isValidRealPatientId(patientId)) return headerIndexes;
+    const pathPatientMatch = dosrecPath.match(/\/exams\/([A-Za-z0-9_-]+)\//i);
+    const patientId = pathPatientMatch ? pathPatientMatch[1] : context.currentPatientId;
+    if (!isValidRealPatientId(patientId)) {
+      context.currentPatientId = "";
+      return;
+    }
     const beamMatch = dosrecPath.match(/Beam[_-]?(\d+)/i);
     const rawBeam = beamMatch ? Number(beamMatch[1]) : NaN;
     const beam = Number.isFinite(rawBeam) ? rawBeam : "";
@@ -357,13 +353,16 @@ function parsePatientCounterRelevantLine(line, headerIndexes, patientMap, contex
       sourceFileName,
       source: "Dosimetry Record"
     });
-    return headerIndexes;
+    return;
   }
 
   const treatmentRecordMatch = message.match(/Treatment Record\s+.+?\s+for Patient\s+([A-Za-z0-9_-]+)\..*?\bFraction\s+(\d+)\./i);
   if (treatmentRecordMatch) {
     const patientId = treatmentRecordMatch[1];
-    if (!isValidRealPatientId(patientId)) return headerIndexes;
+    if (!isValidRealPatientId(patientId)) {
+      context.currentPatientId = "";
+      return;
+    }
     const fraction = Number(treatmentRecordMatch[2]);
     const startInfo = context.patientStartById.get(patientId);
     const sessionStartInfo = context.currentPlanStartById.get(patientId) || startInfo;
@@ -380,7 +379,7 @@ function parsePatientCounterRelevantLine(line, headerIndexes, patientMap, contex
       sourceFileName,
       source: "Treatment Record"
     });
-    return headerIndexes;
+    return;
   }
 
   const beamFractionMatch = message.match(/\bBeam Number:\s*(\d+),\s*Fraction Number:\s*(\d+)/i);
@@ -393,7 +392,7 @@ function parsePatientCounterRelevantLine(line, headerIndexes, patientMap, contex
         sourceFileName
       });
     }
-    return headerIndexes;
+    return;
   }
 
   const beamMatch = message.match(/^Beam number:\s*(\d+)/i);
@@ -405,7 +404,7 @@ function parsePatientCounterRelevantLine(line, headerIndexes, patientMap, contex
         sourceFileName
       });
     }
-    return headerIndexes;
+    return;
   }
 
   const fractionMatch = message.match(/Fraction Number:\s*(\d+)/i);
@@ -422,7 +421,7 @@ function parsePatientCounterRelevantLine(line, headerIndexes, patientMap, contex
     }
   }
 
-  return headerIndexes;
+  return;
 }
 
 function ensurePatientRecord(patientMap, patientId, data) {
@@ -542,6 +541,7 @@ function renderPatientCounterTableAndSummary() {
         </div>
         <button id="patientPrevPageBtn" class="tool-btn pagination-btn" ${currentPage <= 1 ? "disabled" : ""}>上一页</button>
         <button id="patientNextPageBtn" class="tool-btn pagination-btn" ${currentPage >= totalPages ? "disabled" : ""}>下一页</button>
+        <button id="patientLogicBtn" class="tool-btn pagination-btn" type="button" aria-haspopup="dialog">提取逻辑</button>
       </div>
     </div>
     <div class="patient-summary-note">Frac1 可能代表新病人，也可能代表改了计划</div>
@@ -561,10 +561,10 @@ function renderPatientCounterTableAndSummary() {
           <th>Patient ID</th>
           <th>第几次治疗</th>
           <th>status</th>
-          <th>开始时间</th>
-          <th>结束时间</th>
+          <th>起止时间</th>
           <th>治疗耗时</th>
           <th>射野</th>
+          <th>治疗野数</th>
           <th>来源</th>
         </tr>
       </thead>
@@ -578,10 +578,10 @@ function renderPatientCounterTableAndSummary() {
                 <td class="patient-id-cell">${escapePatientHtml(row.patientId)}</td>
                 <td class="patient-fraction-cell">${row.fractionDisplay ? escapePatientHtml(row.fractionDisplay) : "-"}</td>
                 <td>${row.isNew ? `<span class="patient-new-badge">NEW</span>` : `<span class="patient-normal-badge">-</span>`}</td>
-                <td>${escapePatientHtml(formatPatientTimeOnly(row.startTimestamp))}</td>
-                <td>${escapePatientHtml(formatPatientTimeOnly(row.endTimestamp))}</td>
+                <td class="patient-time-cell" title="${escapePatientHtml(`${row.startTimestamp || "未知"} - ${row.endTimestamp || "未知"}`)}">${escapePatientHtml(formatPatientTimeRange(row.startTimestamp, row.endTimestamp))}</td>
                 <td>${escapePatientHtml(formatPatientDuration(row.treatmentDurationMs))}</td>
                 <td>${escapePatientHtml(beams || "-")}</td>
+                <td class="patient-field-count-cell">${row.beams.length ? row.treatmentFieldCount : "-"}</td>
                 <td>${escapePatientHtml(row.source || "-")}</td>
               </tr>
             `;
@@ -598,6 +598,7 @@ function bindPatientPaginationEvents(totalPages) {
   const prevBtn = document.getElementById("patientPrevPageBtn");
   const nextBtn = document.getElementById("patientNextPageBtn");
   const pageInput = document.getElementById("patientPageInput");
+  document.getElementById("patientLogicBtn")?.addEventListener("click", showPatientExtractionLogic);
 
   if (prevBtn) {
     prevBtn.addEventListener("click", () => {
@@ -623,35 +624,75 @@ function bindPatientPaginationEvents(totalPages) {
   }
 }
 
-function parsePatientCsvLine(line) {
-  const result = [];
-  let current = "";
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i += 1) {
-    const char = line[i];
-
-    if (char === '"') {
-      if (inQuotes && line[i + 1] === '"') {
-        current += '"';
-        i += 1;
-      } else {
-        inQuotes = !inQuotes;
+function showPatientExtractionLogic() {
+  let dialog = document.getElementById("patientExtractionDialog");
+  if (!dialog) {
+    dialog = document.createElement("dialog");
+    dialog.id = "patientExtractionDialog";
+    dialog.className = "patient-logic-dialog";
+    dialog.setAttribute("aria-labelledby", "patientLogicTitle");
+    dialog.innerHTML = `
+      <div class="patient-logic-header">
+        <h2 id="patientLogicTitle">Patient Counter · 提取逻辑</h2>
+        <button class="tool-btn patient-logic-close" type="button" aria-label="关闭提取逻辑" autofocus>关闭</button>
+      </div>
+      <div class="patient-logic-body">
+        <p class="patient-logic-notice">这是所选日志的活动汇总，不是治疗完成证明，也不是计划数据库。只打开计划的病人也可能被计入；日志缺失会影响人数、射野和时间。</p>
+        <dl class="patient-logic-list">
+          <dt>Patient ID / 人数</dt>
+          <dd>从 <code>Saving DICOM file (.../exams/&lt;ID&gt;/Debug/BDI...)</code> 或
+            <code>Treatment Record ... for Patient &lt;ID&gt;. ... Fraction N.</code> 提取 ID。
+            <code>Saving dosimetry record at .../exams/&lt;ID&gt;/...FracN.csv</code> 中的明确 ID 优先；路径没有 ID 时使用当前病人上下文。
+            仅保留纯数字 ID，不能据此验证真实身份。全部导入文件按 ID 去重；不按日期或计划另分行。</dd>
+          <dt>第几次治疗 / status</dt>
+          <dd>读取 <code>Fraction Number: N</code>、<code>Treatment Record ... Fraction N.</code>，以及剂量记录文件名 <code>FracN.csv</code>。
+            同一 ID 的次数去重后显示为 <code>Frac 14</code> 或 <code>Frac 1-2, 4</code>；不是按打开计划次数累计。
+            出现 Frac 1 就标记 NEW，可能是首次治疗，也可能是改计划后重新编号。</dd>
+          <dt>起止时间</dt>
+          <dd>时间使用 <code>TC Timestamp</code>，HALO 对应 <code>TC Datetime</code>，不使用 MCC 时间替代，也不额外加减时区。
+            开始参考最近一次 <code>Saving DICOM file (.../Debug/BDI...)</code>；收到剂量或治疗记录时，将该计划打开时间归入对应 Fraction。
+            每个 Fraction 保留最早开始和最晚记录时间，表格显示所有 Fraction 的最早开始至最晚结束。
+            缺少计划打开信息时，开始回退到第一条剂量/治疗记录时间；只有计划打开信息时，结束显示「-」。同日显示 <code>07:03 - 07:22</code>，跨日保留日期；悬停可看完整时间。</dd>
+          <dt>结束时间 / 来源</dt>
+          <dd>结束来自最后一条 <code>Saving dosimetry record at ...FracN.csv</code> 或
+            <code>Treatment Record ... for Patient ... Fraction N.</code> 的 TC 时间。
+            「来源」显示确定最新结束时间的消息类型：Dosimetry Record 或 Treatment Record；只有计划打开标记时显示 Plan Open。
+            它不是 CSV 的 Source 字段，也不是日志文件名；记录写入不保证正常完成照射。</dd>
+          <dt>治疗耗时</dt>
+          <dd>按同一 Patient ID 的每个 Fraction 分别计算「最晚结束 − 最早开始」，再求和，保留一位小数（分钟）。
+            包含 Setup、等待及中断时间，不是 Beam-On 时间；多次 Fraction 的间隔不计入，因此可能不同于整行起止时间之差。
+            没有完整起止记录则显示「-」。多日同编号 Fraction 目前仍会合并。</dd>
+          <dt>射野</dt>
+          <dd>从 <code>Beam Number: N, Fraction Number: M</code>、<code>Beam number: N</code> 和剂量记录路径中的 <code>BeamN</code> 获取，绑定到当前病人，按原始编号去重排序。
+            当前编号约定：原始 Beam 1 显示 Setup；Beam 2 显示 1，Beam 3 显示 2，以此类推。此约定不是通过 DICOM 射野类型判断。</dd>
+          <dt>治疗野数</dt>
+          <dd>统计该病人在所选日志中出现的不同原始 Beam 编号（≥ 2），排除原始 Beam 1（Setup）。重复记录只算一次；例如 <code>Setup, 1, 2, 3</code> → <strong>3</strong>。
+            只有 Setup 为 0；未提取到射野为「-」。这不是编号相加，不是实际照射次数，也不能推断日志中未出现的计划射野。</dd>
+          <dt>文件格式与处理顺序</dt>
+          <dd>支持常规 TCLogger、无表头 rollover 和 HALO CSV。保留引号中的多行 message；候选消息按 TC 时间排序后解析上下文，不依赖 HALO 导出行顺序。相同时间保留原有顺序。</dd>
+        </dl>
+      </div>
+    `;
+    document.body.appendChild(dialog);
+    dialog.querySelector(".patient-logic-close").addEventListener("click", () => dialog.close());
+    dialog.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        dialog.close();
       }
-      continue;
-    }
-
-    if (char === "," && !inQuotes) {
-      result.push(current);
-      current = "";
-      continue;
-    }
-
-    current += char;
+    });
+    dialog.addEventListener("click", (event) => {
+      if (event.target !== dialog) return;
+      const rect = dialog.getBoundingClientRect();
+      if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) dialog.close();
+    });
+    dialog.addEventListener("close", () => document.getElementById("patientLogicBtn")?.focus());
   }
+  if (!dialog.open) dialog.showModal();
+}
 
-  result.push(current);
-  return result;
+function parsePatientCsvLine(line) {
+  return window.CsvUtils.parseRecord(line);
 }
 
 function isValidRealPatientId(patientId) {
@@ -679,6 +720,19 @@ function formatPatientTimeOnly(timestamp) {
   const text = String(timestamp || "").trim();
   const match = text.match(/\d{4}-\d{2}-\d{2}\s+(\d{2}:\d{2})/);
   return match ? match[1] : "-";
+}
+
+function formatPatientTimeRange(start, end) {
+  const startDate = String(start || "").slice(0, 10);
+  const endDate = String(end || "").slice(0, 10);
+  if (startDate && endDate && startDate !== endDate) {
+    return `${startDate} ${formatPatientTimeOnly(start)} - ${endDate} ${formatPatientTimeOnly(end)}`;
+  }
+  return `${formatPatientTimeOnly(start)} - ${formatPatientTimeOnly(end)}`;
+}
+
+function countPatientTreatmentFields(beams) {
+  return new Set(Array.from(beams || []).map(Number).filter((beam) => Number.isInteger(beam) && beam >= 2)).size;
 }
 
 function getPatientTotalTreatmentDurationMs(record) {

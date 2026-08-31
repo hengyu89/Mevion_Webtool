@@ -438,7 +438,7 @@ function initErrorAnalyzerToolPage() {
       <div id="errorAnalyzerDropZone" class="file-drop-zone error-analyzer-drop-zone">
         <input id="errorAnalyzerFileInput" class="file-input-hidden" type="file" accept=".csv" multiple />
         <div class="file-drop-title">点击或拖拽文件到此处</div>
-        <div class="file-drop-subtitle">支持格式: .csv，可一次选择多个 TCLogger 文件</div>
+        <div class="file-drop-subtitle">支持格式: .csv，可一次选择多个 TCLogger / HALO 文件</div>
       </div>
       <div id="errorAnalyzerFileStatus" class="tool-file-list empty-text">尚未选择文件。</div>
       <div id="errorAnalyzerSummary" class="error-analyzer-summary"></div>
@@ -456,6 +456,7 @@ function bindErrorAnalyzerEvents() {
 
   let selectedFiles = [];
   let loadedFileKey = "";
+  let analysisVersion = 0;
 
   function setStatus(message, type = "idle") {
     const status = document.getElementById("errorAnalyzerFileStatus");
@@ -466,31 +467,41 @@ function bindErrorAnalyzerEvents() {
   }
 
   async function analyzeSelectedFiles() {
-    if (!selectedFiles.length) {
+    const version = ++analysisVersion;
+    const files = selectedFiles.slice();
+    const fileKey = loadedFileKey;
+    // A different tool can replace the shared files while this page is reading.
+    const isCurrent = () => version === analysisVersion &&
+      (!window.TcLogFileStore || window.TcLogFileStore.getFileKey() === fileKey);
+    if (!files.length) {
       setStatus("尚未选择文件。", "idle");
       return;
     }
 
     const startTime = performance.now();
-    setStatus(`已选择 ${selectedFiles.length} 份文件，正在分析... (0/${selectedFiles.length})`, "running");
+    setStatus(`已选择 ${files.length} 份文件，正在分析... (0/${files.length})`, "running");
 
     try {
-      const analysis = await parseErrorAnalyzerFiles(selectedFiles, (done, total, currentFileName) => {
+      const analysis = await parseErrorAnalyzerFiles(files, (done, total, currentFileName) => {
+        if (!isCurrent()) return;
         setStatus(
           `已选择 ${total} 份文件，正在分析... (${done}/${total})。当前文件: ${shortenErrorAnalyzerFileName(currentFileName)}`,
           "running"
         );
       });
 
+      if (!isCurrent()) return;
       errorAnalyzerState.analysis = analysis;
       errorAnalyzerState.typeFilter = "";
       renderErrorAnalyzer();
       const timeRange = formatErrorAnalyzerTimeRange(analysis.timeRange);
       setStatus(
-        `共 ${selectedFiles.length} 份文件${timeRange ? `，日志范围：${timeRange}` : ""}，耗时 ${formatErrorAnalyzerElapsed(performance.now() - startTime)}；分析完成！发现 ${analysis.alerts.length} 个需要关注的事件。`,
+        `共 ${files.length} 份文件${timeRange ? `，日志范围：${timeRange}` : ""}，耗时 ${formatErrorAnalyzerElapsed(performance.now() - startTime)}；分析完成！发现 ${analysis.alerts.length} 个需要关注的事件。`,
         "done"
       );
     } catch (error) {
+      if (!isCurrent()) return;
+      loadedFileKey = "";
       console.error(error);
       setStatus(`分析失败：${error.message}`, "error");
       alert(`分析失败：${error.message}`);
@@ -604,7 +615,6 @@ async function parseErrorAnalyzerFiles(files, onProgress) {
 function parseErrorAnalyzerCsvText(text, sourceFile, result, alertMap) {
   let headerIndexes = null;
   let logicalRowIndex = 0;
-  updateErrorAnalyzerTimeRangeFromText(result.timeRange, text);
 
   parseErrorAnalyzerCsvRecords(
     text,
@@ -620,6 +630,7 @@ function parseErrorAnalyzerCsvText(text, sourceFile, result, alertMap) {
 
       logicalRowIndex += 1;
       const timestamp = String(columns[headerIndexes.timestamp] || "").trim();
+      updateErrorAnalyzerTimeRange(result.timeRange, timestamp);
       const message = String(columns[headerIndexes.message] || "").trim();
       if (!timestamp && !message) return;
       result.parsedRows += 1;
@@ -650,9 +661,11 @@ function parseErrorAnalyzerCsvText(text, sourceFile, result, alertMap) {
     {
       shouldParse: (rawRecord, recordIndex) =>
         recordIndex === 0 ||
+        headerIndexes?.timestamp !== 0 ||
         !ERROR_ANALYZER_RAW_DATA_RECORD_RE.test(rawRecord) ||
         ERROR_ANALYZER_RAW_CANDIDATE_RE.test(rawRecord),
-      onSkipped: () => {
+      onSkipped: (rawRecord) => {
+        updateErrorAnalyzerTimeRange(result.timeRange, rawRecord.slice(0, rawRecord.indexOf(",")));
         logicalRowIndex += 1;
         result.parsedRows += 1;
       }
@@ -1137,72 +1150,77 @@ function mergeErrorAnalyzerAdaptiveApertureAlerts(alerts) {
 function mergeErrorAnalyzerKukaCommsAlerts(alerts) {
   const merged = alerts.map(cloneErrorAnalyzerAlert);
   const consumedIndexes = new Set();
-  const supportRuleIds = new Set([
+  const kukaRuleIds = new Set([
+    "kukaCommsUnsatisfied",
     "kukaCommsLatchedEvidence",
     "kukaOnlineEvidence",
     "kukaCommsSatisfiedEvidence",
     "kukaCommsUnlatchedEvidence"
   ]);
+  const events = merged.map((alert, index) => ({ alert, index }))
+    .filter(({ alert }) => kukaRuleIds.has(alert.ruleId));
+  let active = null;
 
-  merged.forEach((incident, incidentIndex) => {
-    if (incident.ruleId !== "kukaCommsUnsatisfied") return;
-
-    const incidentTime = parseErrorAnalyzerTimestampMs(incident.timestamp);
-    const related = [];
-    let satisfied = null;
-    let finalUnlatched = null;
-
-    for (let index = incidentIndex + 1; index < merged.length; index += 1) {
-      const candidate = merged[index];
-      const elapsed = parseErrorAnalyzerTimestampMs(candidate.timestamp) - incidentTime;
-      if (!Number.isFinite(elapsed) || elapsed < 0) continue;
-      if (elapsed > 10 * 60 * 1000 || candidate.ruleId === "kukaCommsUnsatisfied") break;
-      if (candidate.sourceFile !== incident.sourceFile || !supportRuleIds.has(candidate.ruleId)) continue;
-
-      related.push({ alert: candidate, index });
-      if (candidate.ruleId === "kukaCommsSatisfiedEvidence" && !satisfied) {
-        satisfied = candidate;
-      } else if (satisfied && candidate.ruleId === "kukaCommsUnlatchedEvidence") {
-        finalUnlatched = candidate;
-        break;
-      }
-    }
-
-    const latched = related.find(({ alert }) => alert.ruleId === "kukaCommsLatchedEvidence")?.alert;
-    const startEvidence = latched || incident;
-    const endEvidence = finalUnlatched || satisfied;
-    const evidence = [startEvidence, endEvidence]
-      .filter(Boolean)
-      .sort((a, b) => String(a.timestamp || "").localeCompare(String(b.timestamp || "")));
-    const messages = Array.from(
-      new Set(evidence.flatMap((alert) => alert.messages || [alert.message]))
-    ).filter(Boolean);
-    const sourceLabels = Array.from(
-      new Set(
-        [getErrorAnalyzerSourceLabel(incident), ...evidence.map(getErrorAnalyzerSourceLabel)].filter(Boolean)
-      )
-    );
-
-    related.forEach(({ index }) => consumedIndexes.add(index));
-    merged[incidentIndex] = {
+  function finish(endEvidence = active?.satisfied) {
+    if (!active) return;
+    const first = active.events[0];
+    const incident = first.alert;
+    const startEvidence = active.latched || incident;
+    const evidence = [startEvidence, endEvidence].filter(Boolean);
+    const messages = Array.from(new Set(evidence.flatMap((alert) => alert.messages || [alert.message])))
+      .filter(Boolean);
+    const sourceLabels = Array.from(new Set(active.events.map(({ alert }) => getErrorAnalyzerSourceLabel(alert))
+      .filter(Boolean)));
+    active.events.slice(1).forEach(({ index }) => consumedIndexes.add(index));
+    merged[first.index] = {
       ...incident,
+      ruleId: "kukaCommsUnsatisfied",
       ruleLabel: "cCchHB",
       typeLabels: ["cCchHB"],
       source: sourceLabels.join("; "),
       subsystem: "",
-      timestamp: latched?.timestamp || incident.timestamp,
-      endTimestamp: finalUnlatched?.timestamp || satisfied?.timestamp || "",
+      timestamp: startEvidence.timestamp,
+      endTimestamp: endEvidence?.timestamp || "",
       message: messages.join("\n"),
       messages,
       note: "Kuka Offline",
       incidentKind: "kukaCommsOutage",
       supportOnly: false,
-      relatedRows:
-        Number(incident.relatedRows || 1) +
-        related.reduce((total, item) => total + Number(item.alert.relatedRows || 1), 0)
+      relatedRows: active.events.reduce((total, { alert }) => total + Number(alert.relatedRows || 1), 0)
     };
-  });
+    active = null;
+  }
 
+  events.forEach((event, position) => {
+    const { alert } = event;
+    if (alert.ruleId === "kukaCommsUnsatisfied") {
+      // Without a latch boundary, preserve separate unsatisfied/satisfied cycles.
+      if (active && !active.latched) finish();
+      if (!active) active = { events: [], latched: null, satisfied: null };
+      active.satisfied = null;
+    } else if (alert.ruleId === "kukaCommsLatchedEvidence") {
+      // A new latch without a recorded clear is a new boundary, except when a
+      // reset immediately clears and re-latches at the same timestamp.
+      if (active?.latched && !active.resetRelatch && active.latched.timestamp !== alert.timestamp) finish();
+      if (active?.satisfied && !active.latched) finish();
+      if (!active) active = { events: [], latched: null, satisfied: null };
+      active.latched ||= alert;
+      active.resetRelatch = false;
+    }
+    if (!active) return;
+    active.events.push(event);
+    if (alert.ruleId === "kukaCommsSatisfiedEvidence") active.satisfied = alert;
+    if (alert.ruleId === "kukaCommsUnlatchedEvidence") {
+      const next = events[position + 1]?.alert;
+      if (active.latched && next?.ruleId === "kukaCommsLatchedEvidence" && next.timestamp === alert.timestamp) {
+        active.resetRelatch = true;
+      } else {
+        // An explicit clear closes the latch even if recovery lines are absent.
+        finish(alert);
+      }
+    }
+  });
+  finish();
   return merged.filter((alert, index) => !consumedIndexes.has(index));
 }
 
@@ -1877,16 +1895,17 @@ function parseErrorAnalyzerCsvRecord(rawRecord) {
 function getErrorAnalyzerHeaderIndexes(header) {
   const normalized = header.map((value) => String(value || "").trim());
   const indexes = {
-    timestamp: normalized.indexOf("TC Timestamp"),
+    timestamp: normalized.findIndex((name) => name === "TC Timestamp" || name === "TC Datetime"),
     severity: normalized.indexOf("Severity"),
     source: normalized.indexOf("Source"),
     subsystem: normalized.indexOf("Subsystem"),
     category: normalized.indexOf("Category"),
     message: normalized.indexOf("Message Text"),
-    extra: normalized.indexOf("Extra Text")
+    extra: normalized.indexOf("Extra Text"),
+    codeLine: normalized.indexOf("Code Line")
   };
   if (indexes.timestamp < 0 || indexes.category < 0 || indexes.message < 0) {
-    throw new Error("CSV 中未找到 TC Timestamp、Category 或 Message Text 列。");
+    throw new Error("CSV 中未找到 TC Timestamp / TC Datetime、Category 或 Message Text 列。");
   }
   return indexes;
 }
@@ -1922,7 +1941,7 @@ function makeErrorAnalyzerRow(columns, indexes, sourceFile, rowIndex) {
     subsystem: get(indexes.subsystem),
     category: get(indexes.category).toUpperCase(),
     message,
-    extra: get(indexes.extra)
+    extra: [get(indexes.extra), get(indexes.codeLine)].filter(Boolean).join(": ")
   };
 }
 
@@ -2510,29 +2529,12 @@ function splitErrorAnalyzerTimestamp(timestamp) {
   return match ? { date: match[1], time: match[2] } : { date: "-", time: String(timestamp || "-") };
 }
 
-function updateErrorAnalyzerTimeRangeFromText(timeRange, text) {
-  const source = String(text || "");
-  const timestampPattern = "([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?)";
-  const first = source.match(new RegExp(`(?:^|\\n)\\ufeff?${timestampPattern}(?=,)`));
-  if (first) updateErrorAnalyzerTimeRange(timeRange, first[1], true);
-
-  let lineEnd = source.length;
-  for (let attempts = 0; lineEnd > 0 && attempts < 100; attempts += 1) {
-    const lineStart = source.lastIndexOf("\n", lineEnd - 1) + 1;
-    const line = source.slice(lineStart, lineEnd).replace(/\r$/, "");
-    const last = line.match(new RegExp(`^\\ufeff?${timestampPattern}(?=,)`));
-    if (last) {
-      updateErrorAnalyzerTimeRange(timeRange, last[1], true);
-      break;
-    }
-    lineEnd = Math.max(0, lineStart - 1);
-  }
-}
-
 function updateErrorAnalyzerTimeRange(timeRange, timestamp, isValidated = false) {
   const value = String(timestamp || "").trim();
   if (
     !timeRange ||
+    // Devices can emit the Unix epoch before their clock is initialized.
+    value.startsWith("1970-01-01 ") ||
     (!isValidated && !/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(value))
   ) {
     return;

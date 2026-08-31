@@ -189,6 +189,7 @@ function bindTcShiftToolEvents() {
 
   let selectedFiles = [];
   let loadedFileKey = "";
+  let analysisVersion = 0;
 
   function setFileStatus(message, type = "idle") {
     const fileList = document.getElementById("tcFileList");
@@ -199,7 +200,13 @@ function bindTcShiftToolEvents() {
   }
 
   async function analyzeSelectedFiles() {
-    if (!selectedFiles.length) {
+    const version = ++analysisVersion;
+    const files = selectedFiles.slice();
+    const fileKey = loadedFileKey;
+    // A different tool can replace the shared files while this page is reading.
+    const isCurrent = () => version === analysisVersion &&
+      (!window.TcLogFileStore || window.TcLogFileStore.getFileKey() === fileKey);
+    if (!files.length) {
       setFileStatus("尚未选择文件。", "idle");
       return;
     }
@@ -207,12 +214,13 @@ function bindTcShiftToolEvents() {
     const analysisStartTime = performance.now();
 
     setFileStatus(
-      `已选择 ${selectedFiles.length} 份文件，正在分析... (0/${selectedFiles.length})`,
+      `已选择 ${files.length} 份文件，正在分析... (0/${files.length})`,
       "running"
     );
 
     try {
-      const rows = await parseTcShiftFiles(selectedFiles, (done, total, currentFileName) => {
+      const rows = await parseTcShiftFiles(files, (done, total, currentFileName) => {
+        if (!isCurrent()) return;
         const shortName =
           currentFileName.length > 36
             ? `${currentFileName.slice(0, 33)}...`
@@ -224,15 +232,18 @@ function bindTcShiftToolEvents() {
         );
       });
 
+      if (!isCurrent()) return;
       renderTcShiftResults(rows);
 
       const elapsedMs = performance.now() - analysisStartTime;
 
       setFileStatus(
-        `共 ${selectedFiles.length} 份文件，耗时 ${formatAnalysisElapsed(elapsedMs)}，分析完成！`,
+        `共 ${files.length} 份文件，耗时 ${formatAnalysisElapsed(elapsedMs)}，分析完成！`,
         "done"
       );
     } catch (error) {
+      if (!isCurrent()) return;
+      loadedFileKey = "";
       console.error(error);
       setFileStatus(`分析失败：${error.message}`, "error");
       alert(`分析失败：${error.message}`);
@@ -312,69 +323,28 @@ async function parseTcShiftFiles(files, onProgress) {
 }
 
 async function parseTcShiftFileStream(file, angleEvents, shiftEvents) {
-  if (!file.stream || typeof TextDecoder === "undefined") {
-    const text = await file.text();
-    parseTcShiftTextDirect(text, angleEvents, shiftEvents);
-    return;
-  }
-
-  const reader = file.stream().getReader();
-  const decoder = new TextDecoder("utf-8");
-  let buffer = "";
   let headerIndexes = null;
-
-  try {
-    while (true) {
-      const { value, done } = await reader.read();
-      buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
-
-      let lineBreakIndex = findLineBreak(buffer);
-      while (lineBreakIndex !== -1) {
-        const line = buffer.slice(0, lineBreakIndex).replace(/\r$/, "");
-        buffer = buffer.slice(lineBreakIndex + 1);
-        headerIndexes = parseTcShiftRelevantLine(line, headerIndexes, angleEvents, shiftEvents);
-        lineBreakIndex = findLineBreak(buffer);
-      }
-
-      if (done) break;
-    }
-
-    if (buffer) {
-      headerIndexes = parseTcShiftRelevantLine(buffer.replace(/\r$/, ""), headerIndexes, angleEvents, shiftEvents);
-    }
-  } finally {
-    reader.releaseLock();
-  }
+  await window.CsvUtils.readFileRecords(file, (line) => {
+    headerIndexes = parseTcShiftRelevantLine(line, headerIndexes, angleEvents, shiftEvents);
+  });
 }
 
 function parseTcShiftTextDirect(text, angleEvents, shiftEvents) {
   let headerIndexes = null;
-  let start = 0;
-
-  if (text.charCodeAt(0) === 0xfeff) {
-    start = 1;
-  }
-
-  for (let i = start; i <= text.length; i += 1) {
-    if (i === text.length || text[i] === "\n") {
-      const line = text.slice(start, i).replace(/\r$/, "");
-      headerIndexes = parseTcShiftRelevantLine(line, headerIndexes, angleEvents, shiftEvents);
-      start = i + 1;
-    }
-  }
+  window.CsvUtils.forEachRecord(text, (line) => {
+    headerIndexes = parseTcShiftRelevantLine(line, headerIndexes, angleEvents, shiftEvents);
+  });
 }
 
 function parseTcShiftRelevantLine(line, headerIndexes, angleEvents, shiftEvents) {
   if (!line) return headerIndexes;
 
   if (!headerIndexes) {
-    const cleanLine = line.replace(/^\uFEFF/, "");
-    const header = parseCsvLine(cleanLine);
-    return {
-      timestamp: header.indexOf("TC Timestamp"),
-      source: header.indexOf("Source"),
-      message: header.indexOf("Message Text")
-    };
+    const columns = parseCsvLine(line.replace(/^\uFEFF/, ""));
+    if (columns.every((value) => !String(value).trim())) return null;
+    const header = window.CsvUtils.resolveTcLogHeader(columns, true);
+    headerIndexes = header.indexes;
+    if (!header.isData) return headerIndexes;
   }
 
   if (line.indexOf("readback: gantry angle") === -1 && line.indexOf("Storing initial layer shift") === -1) {
@@ -416,10 +386,6 @@ function parseTcShiftRelevantLine(line, headerIndexes, angleEvents, shiftEvents)
   });
 
   return headerIndexes;
-}
-
-function findLineBreak(text) {
-  return text.indexOf("\n");
 }
 
 function buildShiftRows(angleEvents, shiftEvents) {
@@ -1093,7 +1059,7 @@ function parseCsvText(text, fileName) {
       row[key] = cols[index] ?? "";
     });
 
-    const tcTimestamp = row["TC Timestamp"];
+    const tcTimestamp = row["TC Timestamp"] || row["TC Datetime"];
     const tcTimeMs = parseTcTimestamp(tcTimestamp);
 
     if (Number.isNaN(tcTimeMs)) continue;
@@ -1107,35 +1073,7 @@ function parseCsvText(text, fileName) {
 }
 
 function parseCsvLine(line) {
-  const result = [];
-  let current = "";
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-    const next = line[i + 1];
-
-    if (char === '"') {
-      if (inQuotes && next === '"') {
-        current += '"';
-        i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
-      continue;
-    }
-
-    if (char === "," && !inQuotes) {
-      result.push(current);
-      current = "";
-      continue;
-    }
-
-    current += char;
-  }
-
-  result.push(current);
-  return result;
+  return window.CsvUtils.parseRecord(line);
 }
 
 function parseTcTimestamp(value) {

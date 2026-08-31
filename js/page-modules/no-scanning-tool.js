@@ -1,5 +1,6 @@
 const noScanningState = {
   records: [],
+  analysisVersion: 0,
   failures: []
 };
 
@@ -133,6 +134,7 @@ function bindNoScanningFileEvents() {
 }
 
 async function analyzeNoScanningFiles(fileList) {
+  const version = ++noScanningState.analysisVersion;
   const files = Array.from(fileList).filter((file) => /\.csv$/i.test(file.name));
   if (!files.length) {
     setNoScanningStatus("请选择 CSV 文件。", "error");
@@ -146,17 +148,21 @@ async function analyzeNoScanningFiles(fileList) {
   noScanningRuntime.hitRegions.clear();
 
   for (let index = 0; index < files.length; index += 1) {
+    if (version !== noScanningState.analysisVersion) return;
     const file = files[index];
     setNoScanningStatus(`正在分析 ${index + 1}/${files.length}：${file.name}`, "running");
     try {
       const text = await file.text();
+      if (version !== noScanningState.analysisVersion) return;
       records.push(parseNoScanningTreatmentRecord(text, file.name));
     } catch (error) {
+      if (version !== noScanningState.analysisVersion) return;
       failures.push({ fileName: file.name, message: error.message });
     }
     await new Promise((resolve) => window.setTimeout(resolve, 0));
   }
 
+  if (version !== noScanningState.analysisVersion) return;
   records.sort((left, right) => left.dateMs - right.dateMs || left.sourceFileName.localeCompare(right.sourceFileName));
   noScanningState.records = records;
   noScanningState.failures = failures;

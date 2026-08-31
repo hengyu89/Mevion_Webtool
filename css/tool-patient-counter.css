@@ -112,10 +112,12 @@
   min-width: 980px;
 }
 
-.patient-counter-table th:nth-child(5),
-.patient-counter-table th:nth-child(6),
-.patient-counter-table th:nth-child(7) {
+.patient-counter-table th:nth-child(6) {
   width: 92px;
+}
+
+.patient-counter-table th:nth-child(5) {
+  width: 150px;
 }
 
 .patient-counter-table th:nth-child(8) {
@@ -127,8 +129,8 @@
 }
 
 
-.patient-counter-table td:nth-child(8),
-.patient-counter-table th:nth-child(8) {
+.patient-counter-table td:nth-child(7),
+.patient-counter-table th:nth-child(7) {
   white-space: nowrap;
   width: 112px;
 }
@@ -136,3 +138,33 @@
 .patient-counter-table th:nth-child(4) {
   width: 76px;
 }
+
+.patient-time-cell { font-variant-numeric: tabular-nums; }
+.patient-field-count-cell { text-align: center; }
+
+.patient-logic-dialog {
+  width: min(920px, calc(100vw - 40px));
+  max-height: calc(100vh - 48px);
+  padding: 0;
+  border: 1px solid var(--line-dark);
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 12px 48px #0005;
+}
+
+.patient-logic-dialog::backdrop { background: #0007; }
+.patient-logic-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--line-mid);
+}
+.patient-logic-header h2 { margin: 0; font-size: 19px; }
+.patient-logic-body { padding: 0 20px 20px; overflow-y: auto; max-height: calc(100vh - 120px); }
+.patient-logic-notice { padding: 10px 12px; background: #fff7cf; border-left: 3px solid #b28a00; line-height: 1.65; }
+.patient-logic-list { margin: 0; line-height: 1.7; }
+.patient-logic-list dt { font-weight: 800; margin-top: 16px; }
+.patient-logic-list dd { margin: 4px 0 0; }
+.patient-logic-list code { background: #fff8; padding: 1px 4px; overflow-wrap: anywhere; }

@@ -1,6 +1,6 @@
 {
   "name": "mevion-webtool",
-  "version": "2.1.1",
+  "version": "2.1.4",
   "private": true,
   "description": "Offline browser tools for on-site log and daily data analysis.",
   "scripts": {

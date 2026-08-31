@@ -50,7 +50,7 @@ function initTicMonitorToolPage() {
       <div id="ticDropZone" class="file-drop-zone tic-drop-zone">
         <input id="ticFileInput" class="file-input-hidden" type="file" accept=".csv" multiple />
         <div class="file-drop-title">点击或拖拽文件到此处</div>
-        <div class="file-drop-subtitle">支持格式: .csv，可一次选择多个 TCLogger 文件</div>
+        <div class="file-drop-subtitle">支持格式: .csv，可一次选择多个 TCLogger / HALO 文件</div>
       </div>
 
       <div id="ticFileStatus" class="tool-file-list empty-text">尚未选择文件。</div>
@@ -69,6 +69,7 @@ function bindTicMonitorEvents() {
 
   let selectedFiles = [];
   let loadedFileKey = "";
+  let analysisVersion = 0;
 
   function setStatus(message, type = "idle") {
     const status = document.getElementById("ticFileStatus");
@@ -79,31 +80,41 @@ function bindTicMonitorEvents() {
   }
 
   async function analyzeSelectedFiles() {
-    if (!selectedFiles.length) {
+    const version = ++analysisVersion;
+    const files = selectedFiles.slice();
+    const fileKey = loadedFileKey;
+    // A different tool can replace the shared files while this page is reading.
+    const isCurrent = () => version === analysisVersion &&
+      (!window.TcLogFileStore || window.TcLogFileStore.getFileKey() === fileKey);
+    if (!files.length) {
       setStatus("尚未选择文件。", "idle");
       return;
     }
 
     const startTime = performance.now();
-    setStatus(`已选择 ${selectedFiles.length} 份文件，正在分析... (0/${selectedFiles.length})`, "running");
+    setStatus(`已选择 ${files.length} 份文件，正在分析... (0/${files.length})`, "running");
 
     try {
-      const points = await parseTicMonitorFiles(selectedFiles, (done, total, currentFileName) => {
+      const points = await parseTicMonitorFiles(files, (done, total, currentFileName) => {
+        if (!isCurrent()) return;
         setStatus(
           `已选择 ${total} 份文件，正在分析... (${done}/${total})。当前文件: ${shortenTicFileName(currentFileName)}`,
           "running"
         );
       });
 
+      if (!isCurrent()) return;
       ticMonitorState.points = points;
       renderTicMonitorResults();
 
       const elapsedMs = performance.now() - startTime;
       setStatus(
-        `共 ${selectedFiles.length} 份文件，耗时 ${formatTicElapsed(elapsedMs)}，分析完成！`,
+        `共 ${files.length} 份文件，耗时 ${formatTicElapsed(elapsedMs)}，分析完成！`,
         "done"
       );
     } catch (error) {
+      if (!isCurrent()) return;
+      loadedFileKey = "";
       console.error(error);
       setStatus(`分析失败：${error.message}`, "error");
       alert(`分析失败：${error.message}`);
@@ -172,63 +183,28 @@ async function parseTicMonitorFiles(files, onProgress) {
 }
 
 async function parseTicMonitorFileStream(file, points, sourceFileName) {
-  if (!file.stream || typeof TextDecoder === "undefined") {
-    const text = await file.text();
-    parseTicMonitorTextDirect(text, points, sourceFileName);
-    return;
-  }
-
-  const reader = file.stream().getReader();
-  const decoder = new TextDecoder("utf-8");
-  let buffer = "";
   let headerIndexes = null;
-
-  try {
-    while (true) {
-      const { value, done } = await reader.read();
-      buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
-
-      let lineBreakIndex = buffer.indexOf("\n");
-      while (lineBreakIndex !== -1) {
-        const line = buffer.slice(0, lineBreakIndex).replace(/\r$/, "");
-        buffer = buffer.slice(lineBreakIndex + 1);
-        headerIndexes = parseTicMonitorRelevantLine(line, headerIndexes, points, sourceFileName);
-        lineBreakIndex = buffer.indexOf("\n");
-      }
-
-      if (done) break;
-    }
-
-    if (buffer) {
-      headerIndexes = parseTicMonitorRelevantLine(buffer.replace(/\r$/, ""), headerIndexes, points, sourceFileName);
-    }
-  } finally {
-    reader.releaseLock();
-  }
+  await window.CsvUtils.readFileRecords(file, (line) => {
+    headerIndexes = parseTicMonitorRelevantLine(line, headerIndexes, points, sourceFileName);
+  });
 }
 
 function parseTicMonitorTextDirect(text, points, sourceFileName) {
   let headerIndexes = null;
-  let start = text.charCodeAt(0) === 0xfeff ? 1 : 0;
-
-  for (let i = start; i <= text.length; i += 1) {
-    if (i === text.length || text[i] === "\n") {
-      const line = text.slice(start, i).replace(/\r$/, "");
-      headerIndexes = parseTicMonitorRelevantLine(line, headerIndexes, points, sourceFileName);
-      start = i + 1;
-    }
-  }
+  window.CsvUtils.forEachRecord(text, (line) => {
+    headerIndexes = parseTicMonitorRelevantLine(line, headerIndexes, points, sourceFileName);
+  });
 }
 
 function parseTicMonitorRelevantLine(line, headerIndexes, points, sourceFileName) {
   if (!line) return headerIndexes;
 
   if (!headerIndexes) {
-    const header = parseTicCsvLine(line.replace(/^\uFEFF/, ""));
-    return {
-      timestamp: header.indexOf("TC Timestamp"),
-      message: header.indexOf("Message Text")
-    };
+    const columns = parseTicCsvLine(line.replace(/^\uFEFF/, ""));
+    if (columns.every((value) => !String(value).trim())) return null;
+    const header = window.CsvUtils.resolveTcLogHeader(columns);
+    headerIndexes = header.indexes;
+    if (!header.isData) return headerIndexes;
   }
 
   if (line.indexOf("TIC") === -1 || (line.indexOf("temperature") === -1 && line.indexOf("pressure") === -1)) {
@@ -755,30 +731,7 @@ function formatTicValue(value) {
 }
 
 function parseTicCsvLine(line) {
-  const result = [];
-  let current = "";
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i += 1) {
-    const char = line[i];
-    if (char === '"') {
-      if (inQuotes && line[i + 1] === '"') {
-        current += '"';
-        i += 1;
-      } else {
-        inQuotes = !inQuotes;
-      }
-      continue;
-    }
-    if (char === "," && !inQuotes) {
-      result.push(current);
-      current = "";
-      continue;
-    }
-    current += char;
-  }
-  result.push(current);
-  return result;
+  return window.CsvUtils.parseRecord(line);
 }
 
 function normalizeTicSeries(value) {
