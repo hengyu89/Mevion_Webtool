@@ -34,7 +34,7 @@ function initPatientCounterToolPage() {
 
       <div id="patientFileStatus" class="tool-file-list empty-text">尚未选择文件。</div>
       <div id="patientSummary" class="tool-summary"></div>
-      <div id="patientResultTableWrap" class="tool-table-wrap patient-table-wrap"></div>
+      <div id="patientResultTableWrap" class="patient-results-layout"></div>
     </div>
   `;
 
@@ -179,6 +179,7 @@ async function parsePatientCounterFiles(files, onProgress) {
   // HALO exports and overlapping files may not be in chronological order.
   // Only retain candidate messages, then resolve patient context in TC time order.
   context.pendingRecords.sort((a, b) => a.tcTimeMs - b.tcTimeMs);
+  context.patientByTreatmentUid = indexPatientTreatmentUids(context.pendingRecords);
   for (const record of context.pendingRecords) {
     applyPatientCounterMessage(record, patientMap, context);
   }
@@ -197,7 +198,7 @@ async function parsePatientCounterFiles(files, onProgress) {
       return {
         ...item,
         beams,
-        treatmentFieldCount: countPatientTreatmentFields(beams),
+        treatmentFieldCount: Array.from(item.beamsByDate.values()).reduce((sum, dailyBeams) => sum + countPatientTreatmentFields(dailyBeams), 0),
         fractions,
         fraction: fractions.length ? Math.max(...fractions) : "",
         fractionDisplay: formatPatientFractionRange(fractions),
@@ -273,6 +274,7 @@ function parsePatientCounterRelevantLine(line, headerIndexes, patientMap, contex
     line.indexOf("/Debug/") === -1 &&
     line.indexOf("Saving dosimetry record at") === -1 &&
     line.indexOf("Treatment Record ") === -1 &&
+    line.indexOf("No setup images to send for PatientID (") === -1 &&
     line.toLowerCase().indexOf("beam number") === -1 &&
     line.toLowerCase().indexOf("fraction number:") === -1
   ) {
@@ -291,6 +293,19 @@ function parsePatientCounterRelevantLine(line, headerIndexes, patientMap, contex
 }
 
 function applyPatientCounterMessage({ tcTimestamp, tcTimeMs, message, sourceFileName }, patientMap, context) {
+
+  // HALO can omit the plan-open message. An explicit patient/UID must override
+  // the preceding patient's context before applying anonymous beam messages.
+  const explicitContext = message.match(/^No setup images to send for PatientID \(([A-Za-z0-9_-]+)\)/);
+  if (explicitContext) {
+    context.currentPatientId = isValidRealPatientId(explicitContext[1]) ? explicitContext[1] : "";
+    return;
+  }
+  const uidMatch = message.match(/^Treatment UID:\s*([\d.]+),/);
+  if (uidMatch) {
+    context.currentPatientId = context.patientByTreatmentUid?.get(uidMatch[1]) || "";
+    if (context.currentPatientId) ensurePatientRecord(patientMap, context.currentPatientId, {});
+  }
 
   const planOpenMatch = message.match(/Saving DICOM file\s*\([^)]*\/exams\/([A-Za-z0-9_-]+)\/Debug\/BDI[^)]*/i);
   if (planOpenMatch) {
@@ -317,6 +332,7 @@ function applyPatientCounterMessage({ tcTimestamp, tcTimeMs, message, sourceFile
     }
 
     updatePatientRecord(patientMap, patientId, {
+      observationTimestamp: tcTimestamp,
       startTimeMs: tcTimeMs,
       startTimestamp: tcTimestamp,
       sourceFileName,
@@ -337,16 +353,19 @@ function applyPatientCounterMessage({ tcTimestamp, tcTimeMs, message, sourceFile
     const rawBeam = beamMatch ? Number(beamMatch[1]) : NaN;
     const beam = Number.isFinite(rawBeam) ? rawBeam : "";
     const fraction = Number(dosrecMatch[2]);
-    const startInfo = context.patientStartById.get(patientId);
-    const sessionStartInfo = context.currentPlanStartById.get(patientId) || startInfo;
+    const pathStart = getPatientSessionPathStart(dosrecPath, tcTimeMs);
+    const startInfo = context.patientStartById.get(patientId) || pathStart;
+    const sessionStartInfo = context.currentPlanStartById.get(patientId) || pathStart || startInfo;
 
     context.currentPatientId = patientId;
     updatePatientRecord(patientMap, patientId, {
+      observationTimestamp: tcTimestamp,
       fraction,
       beam,
       startTimeMs: startInfo && Number.isFinite(startInfo.timeMs) ? startInfo.timeMs : tcTimeMs,
       sessionStartTimeMs: sessionStartInfo && Number.isFinite(sessionStartInfo.timeMs) ? sessionStartInfo.timeMs : tcTimeMs,
       sessionStartTimestamp: sessionStartInfo ? sessionStartInfo.timestamp : tcTimestamp,
+      sessionStartInferred: !!sessionStartInfo?.inferred,
       endTimeMs: tcTimeMs,
       startTimestamp: startInfo ? startInfo.timestamp : tcTimestamp,
       endTimestamp: tcTimestamp,
@@ -369,6 +388,7 @@ function applyPatientCounterMessage({ tcTimestamp, tcTimeMs, message, sourceFile
 
     context.currentPatientId = patientId;
     updatePatientRecord(patientMap, patientId, {
+      observationTimestamp: tcTimestamp,
       fraction,
       startTimeMs: startInfo && Number.isFinite(startInfo.timeMs) ? startInfo.timeMs : tcTimeMs,
       sessionStartTimeMs: sessionStartInfo && Number.isFinite(sessionStartInfo.timeMs) ? sessionStartInfo.timeMs : tcTimeMs,
@@ -384,9 +404,10 @@ function applyPatientCounterMessage({ tcTimestamp, tcTimeMs, message, sourceFile
 
   const beamFractionMatch = message.match(/\bBeam Number:\s*(\d+),\s*Fraction Number:\s*(\d+)/i);
   if (beamFractionMatch && context.currentPatientId) {
-    const existingRecord = patientMap.get(context.currentPatientId);
+    const existingRecord = ensurePatientRecord(patientMap, context.currentPatientId, {});
     if (existingRecord) {
       updatePatientRecord(patientMap, context.currentPatientId, {
+        observationTimestamp: tcTimestamp,
         beam: Number(beamFractionMatch[1]),
         fraction: Number(beamFractionMatch[2]),
         sourceFileName
@@ -397,9 +418,10 @@ function applyPatientCounterMessage({ tcTimestamp, tcTimeMs, message, sourceFile
 
   const beamMatch = message.match(/^Beam number:\s*(\d+)/i);
   if (beamMatch && context.currentPatientId) {
-    const existingRecord = patientMap.get(context.currentPatientId);
+    const existingRecord = ensurePatientRecord(patientMap, context.currentPatientId, {});
     if (existingRecord) {
       updatePatientRecord(patientMap, context.currentPatientId, {
+        observationTimestamp: tcTimestamp,
         beam: Number(beamMatch[1]),
         sourceFileName
       });
@@ -414,6 +436,7 @@ function applyPatientCounterMessage({ tcTimestamp, tcTimeMs, message, sourceFile
     const existingRecord = patientMap.get(context.currentPatientId);
     if (existingRecord) {
       updatePatientRecord(patientMap, context.currentPatientId, {
+        observationTimestamp: tcTimestamp,
         fraction,
         sourceFileName,
         source: "Fraction Number"
@@ -422,6 +445,50 @@ function applyPatientCounterMessage({ tcTimestamp, tcTimeMs, message, sourceFile
   }
 
   return;
+}
+
+function indexPatientTreatmentUids(records) {
+  const patientByUid = new Map();
+  function bind(uid, patientId) {
+    const id = isValidRealPatientId(patientId) ? patientId : "";
+    if (!patientByUid.has(uid)) patientByUid.set(uid, id);
+    else if (patientByUid.get(uid) !== id) patientByUid.set(uid, "");
+  }
+  // Explicit completed records are authoritative, including ones later in the file.
+  for (const { message } of records) {
+    const record = message.match(/^Treatment Record\s+([\d.]+)\s+for Patient\s+([A-Za-z0-9_-]+)\./);
+    if (record) bind(record[1], record[2]);
+  }
+  let patientId = "";
+  let freshContext = false;
+  for (const { message } of records) {
+    const plan = message.match(/Saving DICOM file\s*\([^)]*\/exams\/([A-Za-z0-9_-]+)\/Debug\/BDI/i);
+    const explicit = message.match(/^No setup images to send for PatientID \(([A-Za-z0-9_-]+)\)/);
+    if (plan || explicit) {
+      patientId = (plan || explicit)[1];
+      freshContext = true;
+    }
+    const uid = message.match(/^Treatment UID:\s*([\d.]+),/);
+    if (uid) {
+      if (!patientByUid.has(uid[1]) && freshContext && isValidRealPatientId(patientId)) bind(uid[1], patientId);
+      patientId = patientByUid.get(uid[1]) || "";
+      freshContext = false;
+    }
+  }
+  return patientByUid;
+}
+
+function getPatientSessionPathStart(path, endTimeMs) {
+  const match = path.match(/\/SESSION_(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})\//);
+  if (!match) return null;
+  const [, year, month, day, hour, minute, second] = match;
+  const timestamp = `${year}-${month}-${day} ${hour}:${minute}:${second}.000`;
+  const timeMs = parsePatientTimestamp(timestamp);
+  const date = new Date(timeMs);
+  if (!Number.isFinite(timeMs) || timeMs > endTimeMs || date.getFullYear() !== Number(year) ||
+    date.getMonth() + 1 !== Number(month) || date.getDate() !== Number(day) ||
+    date.getHours() !== Number(hour) || date.getMinutes() !== Number(minute) || date.getSeconds() !== Number(second)) return null;
+  return { timeMs, timestamp, inferred: true };
 }
 
 function ensurePatientRecord(patientMap, patientId, data) {
@@ -433,6 +500,7 @@ function ensurePatientRecord(patientMap, patientId, data) {
       fraction: null,
       fractions: new Set(),
       beams: new Set(),
+      beamsByDate: new Map(),
       sessionsByFraction: new Map(),
       startTimeMs: Number.isFinite(data.startTimeMs) ? data.startTimeMs : null,
       endTimeMs: Number.isFinite(data.endTimeMs) ? data.endTimeMs : null,
@@ -449,6 +517,7 @@ function ensurePatientRecord(patientMap, patientId, data) {
 function updatePatientRecord(patientMap, patientId, data) {
   const record = ensurePatientRecord(patientMap, patientId, data);
   if (!record) return;
+  if (data.source === "Plan Open") record.hasPlanOpen = true;
 
   if (Number.isFinite(data.fraction)) {
     record.fractions.add(Number(data.fraction));
@@ -467,12 +536,14 @@ function updatePatientRecord(patientMap, patientId, data) {
         startTimeMs: data.sessionStartTimeMs,
         endTimeMs: data.endTimeMs,
         startTimestamp: data.sessionStartTimestamp || data.startTimestamp || "",
+        startInferred: !!data.sessionStartInferred,
         endTimestamp: data.endTimestamp || ""
       });
     } else {
       if (data.sessionStartTimeMs < currentSession.startTimeMs) {
         currentSession.startTimeMs = data.sessionStartTimeMs;
         currentSession.startTimestamp = data.sessionStartTimestamp || data.startTimestamp || currentSession.startTimestamp;
+        currentSession.startInferred = !!data.sessionStartInferred;
       }
       if (data.endTimeMs >= currentSession.endTimeMs) {
         currentSession.endTimeMs = data.endTimeMs;
@@ -483,6 +554,13 @@ function updatePatientRecord(patientMap, patientId, data) {
 
   if (data.beam) {
     record.beams.add(String(data.beam));
+  }
+
+  // Use each message's TC date, not the patient's first plan-open date.
+  const date = String(data.observationTimestamp || "").trim().slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    if (!record.beamsByDate.has(date)) record.beamsByDate.set(date, new Set());
+    if (data.beam) record.beamsByDate.get(date).add(String(data.beam));
   }
 
   if (Number.isFinite(data.startTimeMs)) {
@@ -521,6 +599,7 @@ function renderPatientCounterTableAndSummary() {
   patientCounterState.currentPage = currentPage;
   const start = (currentPage - 1) * pageSize;
   const pageRows = rows.slice(start, start + pageSize);
+  const uncertainCount = rows.filter((row) => !row.hasPlanOpen || row.startInferred || row.source !== "Treatment Record").length;
 
   summary.innerHTML = `
     <div class="summary-row patient-summary-row">
@@ -544,7 +623,7 @@ function renderPatientCounterTableAndSummary() {
         <button id="patientLogicBtn" class="tool-btn pagination-btn" type="button" aria-haspopup="dialog">提取逻辑</button>
       </div>
     </div>
-    <div class="patient-summary-note">Frac1 可能代表新病人，也可能代表改了计划</div>
+    ${uncertainCount ? `<div class="patient-data-notice">${uncertainCount} 位病人缺少计划打开或最终 Treatment Record：带 ≈ 的开始时间由 SESSION 路径推定；结束时间仅代表日志中最后可见记录。射野也可能不完整，请勿视为完整治疗统计。</div>` : ""}
   `;
 
   if (!rows.length) {
@@ -554,6 +633,7 @@ function renderPatientCounterTableAndSummary() {
   }
 
   wrap.innerHTML = `
+    <div class="tool-table-wrap patient-table-wrap">
     <table class="tool-table patient-counter-table">
       <thead>
         <tr>
@@ -578,7 +658,7 @@ function renderPatientCounterTableAndSummary() {
                 <td class="patient-id-cell">${escapePatientHtml(row.patientId)}</td>
                 <td class="patient-fraction-cell">${row.fractionDisplay ? escapePatientHtml(row.fractionDisplay) : "-"}</td>
                 <td>${row.isNew ? `<span class="patient-new-badge">NEW</span>` : `<span class="patient-normal-badge">-</span>`}</td>
-                <td class="patient-time-cell" title="${escapePatientHtml(`${row.startTimestamp || "未知"} - ${row.endTimestamp || "未知"}`)}">${escapePatientHtml(formatPatientTimeRange(row.startTimestamp, row.endTimestamp))}</td>
+                <td class="patient-time-cell" title="${escapePatientHtml(`${row.startTimestamp || "未知"} - ${row.endTimestamp || "未知"}${row.startInferred ? '；开始时间由 SESSION 路径推定（秒级）' : ''}`)}">${row.startInferred ? "≈ " : ""}${escapePatientHtml(formatPatientTimeRange(row.startTimestamp, row.endTimestamp))}</td>
                 <td>${escapePatientHtml(formatPatientDuration(row.treatmentDurationMs))}</td>
                 <td>${escapePatientHtml(beams || "-")}</td>
                 <td class="patient-field-count-cell">${row.beams.length ? row.treatmentFieldCount : "-"}</td>
@@ -589,6 +669,11 @@ function renderPatientCounterTableAndSummary() {
           .join("")}
       </tbody>
     </table>
+    </div>
+    <aside class="patient-results-side" aria-label="治疗射野统计与备注">
+      ${renderPatientFieldStatistics(rows)}
+      <div class="patient-summary-note">Frac1 可能代表新病人，也可能代表改了计划</div>
+    </aside>
   `;
 
   bindPatientPaginationEvents(totalPages);
@@ -644,6 +729,9 @@ function showPatientExtractionLogic() {
             <code>Treatment Record ... for Patient &lt;ID&gt;. ... Fraction N.</code> 提取 ID。
             <code>Saving dosimetry record at .../exams/&lt;ID&gt;/...FracN.csv</code> 中的明确 ID 优先；路径没有 ID 时使用当前病人上下文。
             仅保留纯数字 ID，不能据此验证真实身份。全部导入文件按 ID 去重；不按日期或计划另分行。</dd>
+          <dt>缺少计划打开消息时的病人归属</dt>
+          <dd>先通过 <code>Treatment Record &lt;UID&gt; for Patient &lt;ID&gt;</code> 建立 UID 与病人的对应关系，再解析 <code>Treatment UID: ..., Beam Number: ..., Fraction Number: ...</code>。
+            <code>No setup images to send for PatientID (&lt;ID&gt;)</code> 也可明确切换当前病人。遇到无法确认归属的新 UID 时清空旧上下文，避免把新病人的 Frac 和射野算到上一人。</dd>
           <dt>第几次治疗 / status</dt>
           <dd>读取 <code>Fraction Number: N</code>、<code>Treatment Record ... Fraction N.</code>，以及剂量记录文件名 <code>FracN.csv</code>。
             同一 ID 的次数去重后显示为 <code>Frac 14</code> 或 <code>Frac 1-2, 4</code>；不是按打开计划次数累计。
@@ -652,7 +740,8 @@ function showPatientExtractionLogic() {
           <dd>时间使用 <code>TC Timestamp</code>，HALO 对应 <code>TC Datetime</code>，不使用 MCC 时间替代，也不额外加减时区。
             开始参考最近一次 <code>Saving DICOM file (.../Debug/BDI...)</code>；收到剂量或治疗记录时，将该计划打开时间归入对应 Fraction。
             每个 Fraction 保留最早开始和最晚记录时间，表格显示所有 Fraction 的最早开始至最晚结束。
-            缺少计划打开信息时，开始回退到第一条剂量/治疗记录时间；只有计划打开信息时，结束显示「-」。同日显示 <code>07:03 - 07:22</code>，跨日保留日期；悬停可看完整时间。</dd>
+            缺少计划打开信息时，优先从剂量记录路径 <code>/SESSION_YYYYMMDDhhmmss/</code> 推定开始，标记 ≈，精度到秒；无有效 SESSION 才回退到第一条剂量/治疗记录时间。
+            只有计划打开信息时，结束显示「-」。同日显示 <code>07:03 - 07:22</code>，跨日保留日期；悬停可看完整时间。缺失的结束消息或射野不会凭空补齐。</dd>
           <dt>结束时间 / 来源</dt>
           <dd>结束来自最后一条 <code>Saving dosimetry record at ...FracN.csv</code> 或
             <code>Treatment Record ... for Patient ... Fraction N.</code> 的 TC 时间。
@@ -666,8 +755,13 @@ function showPatientExtractionLogic() {
           <dd>从 <code>Beam Number: N, Fraction Number: M</code>、<code>Beam number: N</code> 和剂量记录路径中的 <code>BeamN</code> 获取，绑定到当前病人，按原始编号去重排序。
             当前编号约定：原始 Beam 1 显示 Setup；Beam 2 显示 1，Beam 3 显示 2，以此类推。此约定不是通过 DICOM 射野类型判断。</dd>
           <dt>治疗野数</dt>
-          <dd>统计该病人在所选日志中出现的不同原始 Beam 编号（≥ 2），排除原始 Beam 1（Setup）。重复记录只算一次；例如 <code>Setup, 1, 2, 3</code> → <strong>3</strong>。
+          <dd>按「Patient ID + TC 日期 + 原始 Beam 编号」去重，统计编号 ≥ 2 的射野，排除原始 Beam 1（Setup）。同一天的重复记录只算一次；例如 <code>Setup, 1, 2, 3</code> → <strong>3</strong>。
+            同一病人跨日出现的射野分别计数，行内治疗野数为各日之和；「射野」列仍显示编号去重后的列表。
             只有 Setup 为 0；未提取到射野为「-」。这不是编号相加，不是实际照射次数，也不能推断日志中未出现的计划射野。</dd>
+          <dt>右侧治疗射野统计</dt>
+          <dd>第一行「全部合计」为本次导入全部病人的治疗野数之和，不受分页影响。下面按 TC 日期从早到晚汇总，日期取射野消息本身的时间，不取文件名或 MCC 日期。
+            同一天不同病人的射野相加，同一病人的重复射野去重；不同日期分别计数（跨午夜的同编号消息也按各自日期归属）。只有 Setup 或未提取到射野的病人活动日期显示 0，0 不代表已确认没有治疗。
+            仅统计日志中识别到的射野，日志缺失可能使结果偏少。</dd>
           <dt>文件格式与处理顺序</dt>
           <dd>支持常规 TCLogger、无表头 rollover 和 HALO CSV。保留引号中的多行 message；候选消息按 TC 时间排序后解析上下文，不依赖 HALO 导出行顺序。相同时间保留原有顺序。</dd>
         </dl>
@@ -735,6 +829,35 @@ function countPatientTreatmentFields(beams) {
   return new Set(Array.from(beams || []).map(Number).filter((beam) => Number.isInteger(beam) && beam >= 2)).size;
 }
 
+function getPatientFieldStatistics(rows) {
+  const countsByDate = new Map();
+  for (const row of rows) {
+    for (const [date, beams] of row.beamsByDate) {
+      countsByDate.set(date, (countsByDate.get(date) || 0) + countPatientTreatmentFields(beams));
+    }
+  }
+  const days = Array.from(countsByDate, ([date, count]) => ({ date, count }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+  return { total: days.reduce((sum, day) => sum + day.count, 0), days };
+}
+
+function renderPatientFieldStatistics(rows) {
+  const { total, days } = getPatientFieldStatistics(rows);
+  const showYear = new Set(days.map((day) => day.date.slice(0, 4))).size > 1;
+  return `<div class="tool-table-wrap patient-field-stats-wrap">
+    <table class="tool-table patient-field-stats-table" aria-label="治疗射野统计">
+      <thead><tr><th scope="col">日期</th><th scope="col">总治疗野数</th></tr></thead>
+      <tbody>
+        <tr class="patient-field-total"><th scope="row">全部合计</th><td>${total}</td></tr>
+        ${days.map(({ date, count }) => {
+          const [year, month, day] = date.split("-").map(Number);
+          return `<tr><th scope="row" title="${date}">${showYear ? `${year}年` : ""}${month}月${day}日</th><td>${count}</td></tr>`;
+        }).join("")}
+      </tbody>
+    </table>
+  </div>`;
+}
+
 function getPatientTotalTreatmentDurationMs(record) {
   if (!record || !record.sessionsByFraction || typeof record.sessionsByFraction.values !== "function") {
     return NaN;
@@ -766,6 +889,7 @@ function getPatientTreatmentWindow(record) {
   let endTimeMs = NaN;
   let startTimestamp = "";
   let endTimestamp = "";
+  let startInferred = false;
 
   for (const session of record.sessionsByFraction.values()) {
     if (!Number.isFinite(session.startTimeMs) || !Number.isFinite(session.endTimeMs)) {
@@ -775,6 +899,7 @@ function getPatientTreatmentWindow(record) {
     if (!Number.isFinite(startTimeMs) || session.startTimeMs < startTimeMs) {
       startTimeMs = session.startTimeMs;
       startTimestamp = session.startTimestamp || "";
+      startInferred = !!session.startInferred;
     }
 
     if (!Number.isFinite(endTimeMs) || session.endTimeMs >= endTimeMs) {
@@ -791,6 +916,7 @@ function getPatientTreatmentWindow(record) {
     startTimeMs,
     endTimeMs,
     startTimestamp,
+    startInferred,
     endTimestamp
   };
 }

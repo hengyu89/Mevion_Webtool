@@ -92,3 +92,107 @@ test("time range preserves missing endpoints and shows dates across midnight", (
   assert.equal(context.formatPatientTimeRange("2026-08-31 07:03:00.000", ""), "07:03 - -");
   assert.equal(context.formatPatientTimeRange("2026-08-31 23:58:00.000", "2026-09-01 00:12:00.000"), "2026-08-31 23:58 - 2026-09-01 00:12");
 });
+
+test("daily field statistics sum patients (3 + 5), excluding Setup and duplicate files", async () => {
+  const csv = file([
+    plan("07:00", "100001"),
+    ...[1, 2, 3, 4].map((beam) => row("07:01", `Beam number: ${beam}`)),
+    plan("08:00", "100002"),
+    ...[1, 2, 3, 4, 5, 6].map((beam) => row("08:01", `Beam number: ${beam}`))
+  ]);
+  const patients = await context.parsePatientCounterFiles([csv, csv]);
+  const stats = context.getPatientFieldStatistics(patients);
+  assert.equal(stats.total, 8);
+  assert.equal(stats.days.length, 1);
+  assert.equal(stats.days[0].date, "2026-08-31");
+  assert.equal(stats.days[0].count, 8);
+  assert.equal(stats.total, patients.reduce((sum, patient) => sum + patient.treatmentFieldCount, 0));
+});
+
+test("same patient beams count separately by TC date, sorted across months and years", async () => {
+  const onDate = (date, rows) => rows.map((line) => line.replace(/^2026-08-31/, date));
+  const patients = await context.parsePatientCounterFiles([file([
+    ...onDate("2027-01-01", [plan("07:00", "100001"), row("07:01", "Beam number: 2")]),
+    ...onDate("2026-09-01", [plan("07:00", "100001"), row("07:01", "Beam number: 2"), row("07:02", "Beam number: 3")]),
+    plan("07:00", "100001"), row("07:01", "Beam number: 2"),
+    row("07:02", "Saving dosimetry record at /exams/100001/Beam2Frac1.csv"),
+    ...onDate("2026-09-02", [plan("07:00", "100002"), row("07:01", "Beam number: 1")])
+  ])]);
+  const stats = context.getPatientFieldStatistics(patients);
+  assert.equal(patients[0].treatmentFieldCount, 4);
+  assert.equal(stats.total, 4);
+  assert.deepEqual(Array.from(stats.days, ({ date, count }) => [date, count]), [
+    ["2026-08-31", 1], ["2026-09-01", 2], ["2026-09-02", 0], ["2027-01-01", 1]
+  ]);
+  assert.match(context.renderPatientFieldStatistics(patients), /2026年8月31日/);
+});
+
+test("field statistics cover every patient beyond the first page and handle empty imports", async () => {
+  const patients = await context.parsePatientCounterFiles([file(Array.from({ length: 31 }, (_, i) =>
+    row("07:01", `Saving dosimetry record at /exams/${100001 + i}/Beam2Frac1.csv`)
+  ))]);
+  assert.equal(context.getPatientFieldStatistics(patients).total, 31);
+  assert.equal(context.getPatientFieldStatistics([]).total, 0);
+});
+
+test("later Treatment Record resolves UID ownership when the next patient's plan open is missing", async () => {
+  const patients = await context.parsePatientCounterFiles([
+    file([plan("10:42", "100001"), row("10:43", "Beam Number: 2, Fraction Number: 9")]),
+    file([
+      row("11:29", "Treatment Record 1.2.3.14 for Patient 100002. Plan 1.2.9. Fraction 14."),
+      row("11:13", "Treatment UID: 1.2.3.14, Beam Number: 4, Fraction Number: 14, Starting Spot Index: 0."),
+      row("11:14", "Beam number: 5")
+    ])
+  ]);
+  assert.equal(patients.find(p => p.patientId === "100001").fractionDisplay, "Frac 9");
+  const next = patients.find(p => p.patientId === "100002");
+  assert.equal(next.fractionDisplay, "Frac 14");
+  assert.deepEqual(Array.from(next.beams), ["4", "5"]);
+});
+
+test("explicit PatientID context binds a UID even when no final Treatment Record exists", async () => {
+  const patients = await context.parsePatientCounterFiles([file([
+    plan("07:00", "100001"),
+    row("08:00", "No setup images to send for PatientID (100002) RT Ion Plan (1.2.3)."),
+    row("08:01", "Treatment UID: 1.2.3.4, Beam Number: 2, Fraction Number: 7"),
+    row("08:02", "Beam number: 3")
+  ])]);
+  assert.equal(patients.find(p => p.patientId === "100001").fractions.length, 0);
+  assert.equal(patients.find(p => p.patientId === "100002").fractionDisplay, "Frac 7");
+  assert.equal(patients.find(p => p.patientId === "100002").treatmentFieldCount, 2);
+});
+
+test("an unresolved new UID cannot inherit the previous patient's context", async () => {
+  const patients = await context.parsePatientCounterFiles([file([
+    plan("07:00", "100001"),
+    row("07:01", "Treatment UID: 1.2.3.4, Beam Number: 2, Fraction Number: 7"),
+    row("08:01", "Treatment UID: 1.2.3.5, Beam Number: 5, Fraction Number: 14"),
+    row("08:02", "Beam number: 6")
+  ])]);
+  assert.equal(patients.length, 1);
+  assert.equal(patients[0].fractionDisplay, "Frac 7");
+  assert.deepEqual(Array.from(patients[0].beams), ["2"]);
+});
+
+test("a missing plan start is inferred from the explicit dosimetry SESSION, without inventing beams", async () => {
+  const patients = await context.parsePatientCounterFiles([file([
+    row("08:06", "Saving dosimetry record at /exams/100001/SESSION_20260831074717/Beam_4/DOSREC_Beam4_Frac2.csv"),
+    record("08:07", "100001", 2)
+  ])]);
+  assert.equal(patients[0].startTimestamp, "2026-08-31 07:47:17.000");
+  assert.equal(patients[0].startInferred, true);
+  assert.equal(patients[0].treatmentFieldCount, 1);
+  assert.equal(context.formatPatientBeamList(patients[0].beams), "3");
+  assert.equal(context.getPatientSessionPathStart("/SESSION_20260230074717/", Date.now()), null);
+  assert.equal(context.getPatientSessionPathStart("/SESSION_20260831090000/", context.parsePatientTimestamp("2026-08-31 08:00:00")), null);
+});
+
+test("an observed plan start takes priority over the rounded SESSION path time", async () => {
+  const patients = await context.parsePatientCounterFiles([file([
+    plan("07:00", "100001"),
+    row("07:10", "Saving dosimetry record at /exams/100001/SESSION_20260831070001/Beam2Frac1.csv")
+  ])]);
+  assert.equal(patients[0].startTimestamp, "2026-08-31 07:00:00.000");
+  assert.equal(patients[0].startInferred, false);
+  assert.equal(patients[0].hasPlanOpen, true);
+});

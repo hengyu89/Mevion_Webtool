@@ -32,10 +32,10 @@ const pageContent = {
     },
     sections: [
       {
-        title: "更新内容 v.2.1.4 — 2026/8/31",
+        title: "更新内容 v.2.1.6 — 2026/8/31",
         type: "text",
         content:
-          "1. 四个 TC Logs 工具兼容 HALO CSV（TC Datetime、多行 message）；<br>2. Patient Counter 合并起止时间、增加治疗野数与「提取逻辑」说明；<br>3. 保留 Kuka 锁存周期合并、无表头日志及连续导入修复。",
+          "1. 修复不完整日志中病人上下文串用导致 Frac / 射野归属错误；<br>2. 缺少计划打开消息时从 SESSION 路径推定开始时间，并以 ≈ 标记；<br>3. 增加记录不完整提示；保留按日射野统计与 HALO 格式兼容。",
         history: [
           {
             version: "v2.1.1",

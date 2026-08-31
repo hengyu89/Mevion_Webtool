@@ -32,7 +32,7 @@
 }
 
 .patient-pagination {
-  margin-left: auto;
+  margin-left: 0;
 }
 
 .patient-pagination .pagination-btn {
@@ -42,17 +42,50 @@
 }
 
 .patient-summary-note {
-  display: inline-flex;
-  align-items: center;
-  min-height: 24px;
-  margin: 1px 0 6px 18px;
-  transform: translateY(4px);
+  margin: auto 0 0;
+  padding: 14px 0 8px;
   color: #555;
   font-size: 12px;
+  line-height: 1.5;
 }
 
+.patient-data-notice {
+  padding: 6px 8px;
+  margin: 6px 0;
+  color: #765300;
+  background: #fff7d8;
+  border-left: 3px solid #b28a00;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+#patientSummary.tool-summary { display: block !important; }
+
+.patient-results-layout {
+  display: flex;
+  align-items: stretch;
+  gap: 18px;
+  overflow-x: auto;
+}
+
+.patient-results-layout:empty { display: none; }
+
+.patient-results-side {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 330px;
+}
+
+.patient-field-stats-wrap { width: 330px !important; max-width: none !important; }
+.patient-field-stats-table { width: 100% !important; }
+.patient-field-stats-table tbody th { font-weight: 400; }
+.patient-field-stats-table td { text-align: right; font-variant-numeric: tabular-nums; }
+.patient-field-stats-table .patient-field-total > * { font-weight: 800; }
+.patient-field-stats-table .patient-field-total { background: #e4ece5; }
+
 .patient-table-wrap {
-  min-width: 760px;
+  flex: 0 0 auto;
+  display: flex;
 }
 
 .patient-counter-table {
