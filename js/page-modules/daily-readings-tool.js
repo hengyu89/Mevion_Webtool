@@ -5,21 +5,21 @@ const dailyReadingsState = {
 };
 
 const DAILY_READING_FIELDS = Object.freeze([
-  { key: "heliumLevel", label: "Helium Level", pattern: /^He Level:\s*([-+\d.eE]+)%/i, format: "fixed2" },
-  { key: "heliumPressure", label: "Helium Pressure", unit: "psi", pattern: /^He Pressure:\s*([-+\d.eE]+)\s+PSIA/i },
-  { key: "heaterPower", label: "Heater Power", unit: "W", pattern: /^Heater Power:\s*([-+\d.eE]+)\s+W/i },
-  { key: "externalLeadPositive", label: "External Lead (+)", unit: "°C", pattern: /^External Lead \(\+\):\s*([-+\d.eE]+)\s+C/i },
-  { key: "externalLeadNegative", label: "External Lead (-)", unit: "°C", pattern: /^External Lead \(-\):\s*([-+\d.eE]+)\s+C/i },
-  { key: "htsLead1Top", label: "HTS Lead 1 - Top", unit: "K", pattern: /^Coil Temperature for T1:.*?:\s*([-+\d.eE]+)\s+degrees K/i },
-  { key: "htsLead2Top", label: "HTS Lead 2 - Top", unit: "K", pattern: /^Coil Temperature for T2:.*?:\s*([-+\d.eE]+)\s+degrees K/i },
-  { key: "htsLead1Bottom", label: "HTS Lead 1 - Bottom", unit: "K", pattern: /^Coil Temperature for T3:.*?:\s*([-+\d.eE]+)\s+degrees K/i },
-  { key: "htsLead2Bottom", label: "HTS Lead 2 - Bottom", unit: "K", pattern: /^Coil Temperature for T4:.*?:\s*([-+\d.eE]+)\s+degrees K/i },
-  { key: "coil1Temperature", label: "Coil 1 Temp", unit: "K", pattern: /^Coil Temperature for CM1:.*?:\s*([-+\d.eE]+)\s+degrees K/i },
-  { key: "coil2Temperature", label: "Coil 2 Temp", unit: "K", pattern: /^Coil Temperature for CM2:.*?:\s*([-+\d.eE]+)\s+degrees K/i },
-  { key: "cryostatVacuum", label: "Cryostat Vacuum (E-08)", pattern: /^Cryostat Vacuum Pressure:\s*([-+\d.eE]+)\s+Torr/i, scalePower: 8 },
-  { key: "cyclotronVacuum", label: "Cyclotron Vacuum (E-07)", pattern: /^Cyclotron Vacuum Pressure:\s*([-+\d.eE]+)\s+Torr/i, scalePower: 7 },
-  { key: "rfVacuum", label: "RF Vacuum (E-07)", pattern: /^RF Vacuum Pressure:\s*([-+\d.eE]+)\s+Torr/i, scalePower: 7 },
-  { key: "lemCurrent", label: "LEM", unit: "A", pattern: /^QDSP1 Secondary Current:\s*([-+\d.eE]+)/i }
+  { key: "heliumLevel", label: "Helium Level (%)", pattern: /^He Level:\s*([-+\d.eE]+)%/i, format: "fixed2" },
+  { key: "heliumPressure", label: "Helium Pressure (psia)", pattern: /^He Pressure:\s*([-+\d.eE]+)\s+PSIA/i },
+  { key: "heaterPower", label: "Heater Power (W)", pattern: /^Heater Power:\s*([-+\d.eE]+)\s+W/i },
+  { key: "externalLeadPositive", label: "External Lead (+) (°C)", pattern: /^External Lead \(\+\):\s*([-+\d.eE]+)\s+C/i },
+  { key: "externalLeadNegative", label: "External Lead (-) (°C)", pattern: /^External Lead \(-\):\s*([-+\d.eE]+)\s+C/i },
+  { key: "htsLead1Top", label: "HTS Lead 1 - Top (K)", pattern: /^Coil Temperature for T1:.*?:\s*([-+\d.eE]+)\s+degrees K/i },
+  { key: "htsLead2Top", label: "HTS Lead 2 - Top (K)", pattern: /^Coil Temperature for T2:.*?:\s*([-+\d.eE]+)\s+degrees K/i },
+  { key: "htsLead1Bottom", label: "HTS Lead 1 - Bottom (K)", pattern: /^Coil Temperature for T3:.*?:\s*([-+\d.eE]+)\s+degrees K/i },
+  { key: "htsLead2Bottom", label: "HTS Lead 2 - Bottom (K)", pattern: /^Coil Temperature for T4:.*?:\s*([-+\d.eE]+)\s+degrees K/i },
+  { key: "coil1Temperature", label: "Coil 1 Temp (K)", pattern: /^Coil Temperature for CM1:.*?:\s*([-+\d.eE]+)\s+degrees K/i },
+  { key: "coil2Temperature", label: "Coil 2 Temp (K)", pattern: /^Coil Temperature for CM2:.*?:\s*([-+\d.eE]+)\s+degrees K/i },
+  { key: "cryostatVacuum", label: "Cryostat Vacuum (E-08) (Torr)", pattern: /^Cryostat Vacuum Pressure:\s*([-+\d.eE]+)\s+Torr/i, scalePower: 8 },
+  { key: "cyclotronVacuum", label: "Cyclotron Vacuum (E-07) (Torr)", pattern: /^Cyclotron Vacuum Pressure:\s*([-+\d.eE]+)\s+Torr/i, scalePower: 7 },
+  { key: "rfVacuum", label: "RF Vacuum (E-07) (Torr)", pattern: /^RF Vacuum Pressure:\s*([-+\d.eE]+)\s+Torr/i, scalePower: 7 },
+  { key: "lemCurrent", label: "LEM (A)", pattern: /^QDSP1 Secondary Current:\s*([-+\d.eE]+)/i }
 ]);
 
 const DAILY_READING_CANDIDATE_RE = /Daily Service Log begins|He Level:|He Pressure:|Heater Power:|External Lead \([+-]\):|Coil Temperature for (?:T[1-4]|CM[12]):|(?:Cyclotron|Cryostat|RF) Vacuum Pressure:|QDSP1 Secondary Current:/i;
