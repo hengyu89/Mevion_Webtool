@@ -88,14 +88,13 @@ function bindPatientCounterEvents() {
       });
 
       if (!isCurrent()) return;
-      const rows = extractedRows;
+      const rows = filterTreatedPatientRows(extractedRows);
       renderPatientCounterResults(rows);
 
-      const treatedCount = countTreatedPatients(rows);
       const newCount = rows.filter((row) => row.isNew).length;
       const elapsedMs = performance.now() - startTime;
       setStatus(
-        `共 ${files.length} 份文件，耗时 ${formatPatientElapsed(elapsedMs)}，分析完成！识别 ${rows.length} 个病人，其中治疗人数 ${treatedCount}，${newCount} 个治疗 Frac 1。`,
+        `共 ${files.length} 份文件，耗时 ${formatPatientElapsed(elapsedMs)}，分析完成！治疗人数 ${rows.length}，其中 ${newCount} 个 Frac 1。`,
         "done"
       );
     } catch (error) {
@@ -214,7 +213,7 @@ async function parsePatientCounterFiles(files, onProgress) {
         ...item,
         observedBeams,
         observedFractions,
-        beams: observedBeams,
+        beams: recordedBeams,
         hasBeamDelivery,
         treatmentFieldCount: Array.from(item.recordedTreatmentBeamsByDate.values()).reduce((sum, dailyBeams) => sum + countPatientTreatmentFields(dailyBeams), 0),
         fractions,
@@ -631,13 +630,20 @@ function countTreatedPatients(rows) {
   return Array.from(rows || []).filter((row) => row.hasBeamDelivery).length;
 }
 
+function filterTreatedPatientRows(rows) {
+  const sourceRows = Array.from(rows || []);
+  if (sourceRows.every((row) => !Object.prototype.hasOwnProperty.call(row, "hasBeamDelivery"))) return rows || [];
+  return sourceRows.filter((row) =>
+    !Object.prototype.hasOwnProperty.call(row, "hasBeamDelivery") || row.hasBeamDelivery
+  );
+}
+
 function renderPatientCounterTableAndSummary() {
   const summary = document.getElementById("patientSummary");
   const wrap = document.getElementById("patientResultTableWrap");
   if (!summary || !wrap) return;
 
   const rows = patientCounterState.rows;
-  const treatedCount = countTreatedPatients(rows);
   const newCount = rows.filter((row) => row.isNew).length;
   const pageSize = patientCounterState.pageSize;
   const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
@@ -650,9 +656,8 @@ function renderPatientCounterTableAndSummary() {
 
   summary.innerHTML = `
     <div class="summary-row patient-summary-row">
-      <div class="summary-card patient-activity-card"><strong>识别病人数：</strong>${rows.length}</div>
-      <div class="summary-card patient-count-card"><strong>治疗人数：</strong>${treatedCount}</div>
-      <div class="summary-card patient-new-card"><strong>治疗 Frac 1：</strong>${newCount}</div>
+      <div class="summary-card patient-count-card"><strong>治疗人数：</strong>${rows.length}</div>
+      <div class="summary-card patient-new-card"><strong>Frac 1 数：</strong>${newCount}</div>
       <div class="table-pagination compact-pagination patient-pagination">
         <div class="pagination-info compact-pagination-info">
           第
@@ -695,7 +700,7 @@ function renderPatientCounterTableAndSummary() {
           <th>status</th>
           <th>起止时间</th>
           <th>治疗耗时</th>
-          <th>涉及射野</th>
+          <th>治疗射野</th>
           <th>治疗野数</th>
           <th>来源</th>
         </tr>
@@ -710,10 +715,10 @@ function renderPatientCounterTableAndSummary() {
                 <td class="muted-cell">${start + index + 1}</td>
                 <td class="patient-id-cell">${escapePatientHtml(row.patientId)}</td>
                 <td class="patient-fraction-cell">${row.fractionDisplay ? escapePatientHtml(row.fractionDisplay) : "-"}</td>
-                <td>${!row.hasBeamDelivery ? `<span class="patient-no-beam-badge">未见出束</span>` : row.isNew ? `<span class="patient-new-badge">NEW</span>` : `<span class="patient-normal-badge">-</span>`}</td>
+                <td>${row.isNew ? `<span class="patient-new-badge">NEW</span>` : `<span class="patient-normal-badge">-</span>`}</td>
                 <td class="patient-time-cell" title="${escapePatientHtml(`${row.startTimestamp || "未知"} - ${row.endTimestamp || "未知"}${row.startInferred ? '；开始时间由 SESSION 路径推定（秒级）' : ''}`)}">${row.startInferred ? "≈ " : ""}${escapePatientHtml(formatPatientTimeRange(row.startTimestamp, row.endTimestamp))}</td>
                 <td>${escapePatientHtml(formatPatientDuration(row.treatmentDurationMs))}</td>
-                <td class="patient-beams-cell" title="${escapePatientHtml(beamsText ? '粗体：有出束记录；浅色：未见出束' : '未识别到射野')}">${beamsHtml || "-"}</td>
+                <td class="patient-beams-cell" title="${escapePatientHtml(beamsText ? '均有 Saving dosimetry record 证据' : '未识别到治疗射野')}">${beamsHtml || "-"}</td>
                 <td class="patient-field-count-cell">${row.treatmentFieldCount}</td>
                 <td>${escapePatientHtml(row.source || "-")}</td>
               </tr>
@@ -725,7 +730,7 @@ function renderPatientCounterTableAndSummary() {
     </div>
     <aside class="patient-results-side" aria-label="治疗射野统计与备注">
       ${renderPatientFieldStatistics(rows)}
-      <div class="patient-beam-legend"><strong>粗体</strong>：有出束记录 &middot; <span>浅色</span>：未见出束</div>
+      <div class="patient-beam-legend"><strong>粗体治疗射野</strong>：有 Saving dosimetry record 证据</div>
       <div class="patient-summary-note">Frac1 可能代表新病人，也可能代表改了计划</div>
     </aside>
   `;
@@ -791,19 +796,19 @@ function showPatientExtractionLogic() {
         <button class="tool-btn patient-logic-close" type="button" aria-label="关闭提取逻辑" autofocus>关闭</button>
       </div>
       <div class="patient-logic-body">
-        <p class="patient-logic-notice">这是所选日志的病人活动与出束记录汇总，不是治疗完成证明，也不是计划数据库。定位、复位或只打开计划的病人会保留在列表中；日志缺失会影响人数、射野和时间。</p>
+        <p class="patient-logic-notice">这是所选日志中具有明确治疗野剂量记录的治疗汇总，不是治疗完成证明，也不是计划数据库。定位、复位、只打开计划或只打开射野但未见出束记录的病人不会显示；日志缺失会影响人数、射野和时间。</p>
         <dl class="patient-logic-list">
           <dt>Patient ID / 人数</dt>
           <dd>从 <code>Saving DICOM file (.../exams/&lt;ID&gt;/Debug/BDI...)</code> 或
             <code>Treatment Record ... for Patient &lt;ID&gt;. ... Fraction N.</code> 提取 ID。
             <code>Saving dosimetry record at .../exams/&lt;ID&gt;/...FracN.csv</code> 中的明确 ID 优先；路径没有 ID 时使用当前病人上下文。
-            仅保留纯数字 ID，不能据此验证真实身份。全部导入文件按 ID 去重；不按日期或计划另分行。「识别病人数」包含定位、复位、只打开计划等活动，不等同于治疗人数。
-            「治疗人数」要求该病人至少有一个原始 Beam ≥ 2 的明确剂量落盘记录。</dd>
+            仅保留纯数字 ID，不能据此验证真实身份。全部导入文件按 ID 去重；不按日期或计划另分行。
+            「治疗人数」要求该病人至少有一个原始 Beam ≥ 2 的明确剂量落盘记录；只有 Setup、定位、复位或只打开射野的病人不显示。</dd>
           <dt>缺少计划打开消息时的病人归属</dt>
           <dd>先通过 <code>Treatment Record &lt;UID&gt; for Patient &lt;ID&gt;</code> 建立 UID 与病人的对应关系，再解析 <code>Treatment UID: ..., Beam Number: ..., Fraction Number: ...</code>。
             <code>No setup images to send for PatientID (&lt;ID&gt;)</code> 也可明确切换当前病人。遇到无法确认归属的新 UID 时清空旧上下文，避免把新病人的 Frac 和射野算到上一人。</dd>
           <dt>第几次治疗 / status</dt>
-          <dd>有出束记录时采用已计入治疗的剂量记录文件名 <code>FracN.csv</code>；没有出束记录时仍显示上下文中观察到的 Frac，但 status 标记「未见出束」。<code>Fraction Number: N</code> 与 <code>Treatment Record ... Fraction N.</code> 不会单独计入治疗人数。
+          <dd>采用已计入治疗的剂量记录文件名 <code>FracN.csv</code>；<code>Fraction Number: N</code> 与 <code>Treatment Record ... Fraction N.</code> 不会单独计入治疗人数。
             同一 ID 的次数去重后显示为 <code>Frac 14</code> 或 <code>Frac 1-2, 4</code>；不是按打开计划次数累计。
             只有带出束证据的 Frac 1 才标记 NEW，可能是首次治疗，也可能是改计划后重新编号。</dd>
           <dt>起止时间</dt>
@@ -820,11 +825,10 @@ function showPatientExtractionLogic() {
           <dt>治疗耗时</dt>
           <dd>按 Treatment UID（缺少 UID 时按剂量路径中的 SESSION）区分治疗时段，只汇总含有效治疗野剂量记录的时段；每段计算「结束 − 计划打开/SESSION 开始」，再求和并保留一位小数（分钟）。
             包含 Setup、等待及中断时间，不是 Beam-On 时间；同一 Frac 的多次独立打开不会再合并为一整段，纯 Setup 或仅选择射野的时段不计入。
-            没有完整起止记录或整行未见出束则显示「-」；未见出束的行仍可显示日志活动的起止范围，便于识别定位或复位过程。</dd>
-          <dt>涉及射野</dt>
-          <dd>显示病人上下文中观察到的 <code>Treatment UID: ..., Beam Number: N</code>、<code>Beam number: N</code> 及剂量路径 Beam，包括复位时打开但没有出束的野；因此该列不能作为已治疗证明。
-            已治疗野只从明确落盘的 <code>Saving dosimetry record at .../exams/&lt;ID&gt;/.../Beam_N/...FracM.csv</code> 获取。原始 Beam 1（Setup）仅辅助显示，不计入治疗人数或治疗野数。
-            表格中有出束记录的治疗野使用<strong>粗体深色</strong>，未见出束记录的射野（包括 Setup）使用<span class="patient-beam-not-delivered">浅色</span>。
+            没有完整起止记录则显示「-」。</dd>
+          <dt>治疗射野</dt>
+          <dd>只显示从明确落盘的 <code>Saving dosimetry record at .../exams/&lt;ID&gt;/.../Beam_N/...FracM.csv</code> 获取的治疗野，并使用<strong>粗体深色</strong>。
+            <code>Treatment UID: ..., Beam Number: N</code>、<code>Beam number: N</code>、定位、复位及Setup不会单独显示为治疗射野。原始 Beam 1（Setup）不计入治疗人数或治疗野数。
             当前编号约定：原始 Beam 1 显示 Setup；Beam 2 显示 1，Beam 3 显示 2，以此类推。此约定不是通过 DICOM 射野类型判断。</dd>
           <dt>治疗野数</dt>
           <dd>按明确剂量记录中的「Patient ID + TC 日期 + 原始 Beam 编号」去重，统计编号 ≥ 2 的射野，排除原始 Beam 1（Setup）。同一天同一治疗野的中断续照或重复日志只算一次；例如 <code>Setup, 1, 2, 3</code> → <strong>3</strong>。
@@ -1049,7 +1053,7 @@ function formatPatientBeamListHtml(row) {
     .map((beam) => {
       const label = beam === 1 ? "Setup" : String(beam - 1);
       const className = delivered.has(beam) ? "patient-beam-delivered" : "patient-beam-not-delivered";
-      const title = delivered.has(beam) ? "有出束记录" : "未见出束记录";
+      const title = delivered.has(beam) ? "有 Saving dosimetry record 证据" : "未见出束记录";
       return `<span class="${className}" title="${title}">${label}</span>`;
     })
     .join('<span class="patient-beam-separator">, </span>');

@@ -38,7 +38,7 @@ test("treatment field count excludes Setup and counts distinct beam IDs, not the
     ...[1, 2, 2, 4].map((beam) => dose("07:01", "100001", beam)),
     record("07:22", "100001", 1)
   ])]))[0];
-  assert.equal(context.formatPatientBeamList(patient.beams), "Setup, 1, 3");
+  assert.equal(context.formatPatientBeamList(patient.beams), "1, 3");
   assert.equal(patient.treatmentFieldCount, 2);
   assert.equal(patient.isNew, true);
   assert.equal(context.countPatientTreatmentFields([1, "1", 2, "2", 4, 0, -1]), 2);
@@ -229,7 +229,7 @@ test("final-record checks use actual record timestamps rather than the displayed
   assert.match(context.getPatientRecordNotices(patients[0])[0], /最后一条剂量记录之后/);
 });
 
-test("selected fields and setup-only records stay visible but do not count as treated", async () => {
+test("selected fields and setup-only records do not enter the treatment result", async () => {
   const rows = await context.parsePatientCounterFiles([file([
     plan("17:56", "100001"),
     row("17:57", "Treatment UID: 1.2.3.1, Beam Number: 3, Fraction Number: 1"),
@@ -244,10 +244,13 @@ test("selected fields and setup-only records stay visible but do not count as tr
   assert.equal(context.countTreatedPatients(rows), 1);
   assert.equal(rows[0].hasBeamDelivery, false);
   assert.equal(rows[0].fractionDisplay, "Frac 1");
-  assert.deepEqual(Array.from(rows[0].beams), ["2", "3"]);
+  assert.deepEqual(Array.from(rows[0].observedBeams), ["2", "3"]);
+  assert.deepEqual(Array.from(rows[0].beams), []);
   assert.equal(rows[0].treatmentFieldCount, 0);
   assert.equal(rows[0].isNew, false);
   assert.equal(context.getPatientFieldStatistics(rows).total, 1);
+  const treated = context.filterTreatedPatientRows(rows);
+  assert.deepEqual(Array.from(treated, (patient) => patient.patientId), ["100002"]);
 });
 
 test("delivered fractions and statistics exclude selected-only fields on an otherwise treated patient", async () => {
@@ -264,7 +267,7 @@ test("delivered fractions and statistics exclude selected-only fields on an othe
   assert.equal(context.getPatientFieldStatistics([patient]).total, 1);
   const beamHtml = context.formatPatientBeamListHtml(patient);
   assert.match(beamHtml, /patient-beam-delivered[^>]*>1<\/span>/);
-  assert.match(beamHtml, /patient-beam-not-delivered[^>]*>4<\/span>/);
+  assert.doesNotMatch(beamHtml, />4<\/span>/);
 });
 
 test("setup-only sessions with the same Fraction do not inflate a later delivered session", async () => {
