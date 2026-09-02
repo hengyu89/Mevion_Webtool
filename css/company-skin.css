@@ -239,6 +239,7 @@ select {
 
 .summary-card,
 .tc-data-count,
+.patient-activity-card,
 .patient-count-card,
 .patient-new-card {
   min-height: 23px !important;

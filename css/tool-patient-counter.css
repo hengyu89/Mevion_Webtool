@@ -22,6 +22,7 @@
   margin: 4px 0 3px;
 }
 
+.patient-activity-card,
 .patient-count-card,
 .patient-new-card {
   font-weight: 800;
@@ -47,6 +48,29 @@
   color: #555;
   font-size: 12px;
   line-height: 1.5;
+}
+
+.patient-beam-legend {
+  margin-top: 12px;
+  color: #555;
+  font-size: 12px;
+}
+
+.patient-beam-legend strong,
+.patient-beam-delivered {
+  color: #111;
+  font-weight: 900;
+}
+
+.patient-beam-legend span,
+.patient-beam-not-delivered {
+  color: #999;
+  font-weight: 400;
+}
+
+.patient-beam-separator {
+  color: #777;
+  font-weight: 400;
 }
 
 .patient-data-notice {
@@ -132,10 +156,23 @@
   color: #888;
 }
 
+.patient-no-beam-badge {
+  display: inline-block;
+  min-width: 62px;
+  padding: 2px 5px;
+  border: 1px solid #b28a00;
+  background: #fff7d8;
+  color: #765300;
+  font-weight: 700;
+  text-align: center;
+  white-space: nowrap;
+}
+
 .patient-empty {
   padding: 10px;
 }
 
+.patient-activity-card,
 .patient-count-card,
 .patient-new-card {
   min-width: 92px;
@@ -175,6 +212,7 @@
 }
 
 .patient-time-cell { font-variant-numeric: tabular-nums; }
+.patient-beams-cell { white-space: nowrap; }
 .patient-field-count-cell { text-align: center; }
 
 .patient-logic-dialog {

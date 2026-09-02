@@ -61,7 +61,7 @@ const tools = [
   {
     name: "Patient Counter",
     parse: context.parsePatientCounterFiles,
-    rows: [row("Saving DICOM file (/exams/12345678/Debug/BDI.dcm)"), row("Saving dosimetry record at /exams/12345678/Beam1Frac1.csv", "MCC", "11")],
+    rows: [row("Saving DICOM file (/exams/12345678/Debug/BDI.dcm)"), row("Saving dosimetry record at /exams/12345678/Beam2Frac1.csv", "MCC", "11")],
     verify(result) {
       assert.equal(result.length, 1);
       assert.equal(result[0].fraction, 1);
