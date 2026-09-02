@@ -375,6 +375,16 @@
   --tool-accent-bg: #f1e7d2;
 }
 
+.tool-directory-tone-readings {
+  --tool-accent: #6d5b2e;
+  --tool-accent-bg: #eee7d3;
+}
+
+.tool-directory-tone-readings .tool-directory-link-icon {
+  font-size: 9px;
+  white-space: nowrap;
+}
+
 .tool-directory-tone-daily {
   --tool-accent: #66538e;
   --tool-accent-bg: #e7e1f0;

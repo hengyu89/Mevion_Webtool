@@ -1,5 +1,5 @@
 /* global findParentIdByChildId, initErrorAnalyzerToolPage, initPatientCounterToolPage */
-/* global initNoScanningToolPage, initTcShiftToolPage, initTicMonitorToolPage, initTicSweepToolPage */
+/* global initDailyReadingsToolPage, initNoScanningToolPage, initTcShiftToolPage, initTicMonitorToolPage, initTicSweepToolPage */
 /* global menuData, renderMainContent, renderMenu, renderSideContent */
 
 const state = {
@@ -158,6 +158,13 @@ function initPageModule(pageId) {
     initTicMonitorToolPage();
     if (typeof window.activateTicMonitorToolPage === "function") {
       window.activateTicMonitorToolPage();
+    }
+  }
+
+  if (pageId === "tool-daily-readings") {
+    initDailyReadingsToolPage();
+    if (typeof window.activateDailyReadingsToolPage === "function") {
+      window.activateDailyReadingsToolPage();
     }
   }
 

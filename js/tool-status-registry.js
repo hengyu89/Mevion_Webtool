@@ -3,7 +3,8 @@
     { id: "tool-error-analyzer", shortName: "Error", title: "Error Analyzer" },
     { id: "tool-tc-shift", shortName: "SM Cal", title: "Scanning Magnet Shift" },
     { id: "tool-patient-counter", shortName: "Patient Ct.", title: "Patient Counter" },
-    { id: "tool-tic-monitor", shortName: "TIC Temp", title: "TIC Temperature" }
+    { id: "tool-tic-monitor", shortName: "TIC Temp", title: "TIC Temperature" },
+    { id: "tool-daily-readings", shortName: "Daily", title: "Daily Readings" }
   ];
 
   const state = new Map(

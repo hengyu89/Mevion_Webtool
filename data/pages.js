@@ -10,7 +10,8 @@ const menuData = [
       { id: "tool-error-analyzer", title: "Error Analyzer" },
       { id: "tool-tc-shift", title: "SM Layer Shift" },
       { id: "tool-patient-counter", title: "Patient Counter" },
-      { id: "tool-tic-monitor", title: "TIC Temp & Pressure" }
+      { id: "tool-tic-monitor", title: "TIC Temp & Pressure" },
+      { id: "tool-daily-readings", title: "Daily Readings" }
     ]
   },
   {
@@ -85,6 +86,13 @@ const pageContent = {
                 pageId: "tool-tic-monitor",
                 icon: "°C",
                 tone: "environment"
+              },
+              {
+                label: "Daily Readings",
+                desc: "提取 05:00 设备点检数据",
+                pageId: "tool-daily-readings",
+                icon: "5 am",
+                tone: "readings"
               }
             ]
           },
@@ -205,6 +213,11 @@ const pageContent = {
             label: "TIC Temp & Pressure",
             desc: "TICs 温度与气压趋势",
             pageId: "tool-tic-monitor"
+          },
+          {
+            label: "Daily Readings",
+            desc: "提取 05:00 设备点检数据",
+            pageId: "tool-daily-readings"
           }
         ]
       }
@@ -341,6 +354,22 @@ const pageContent = {
         title: "工具区",
         type: "custom",
         customId: "ticMonitorToolRoot"
+      }
+    ],
+    side: []
+  },
+
+  "tool-daily-readings": {
+    hero: {
+      tag: "",
+      title: "Daily Readings",
+      desc: "导入 TCLogger 文件，提取每天 05:00 自动记录的设备点检数据。"
+    },
+    sections: [
+      {
+        title: "工具区",
+        type: "custom",
+        customId: "dailyReadingsToolRoot"
       }
     ],
     side: []
