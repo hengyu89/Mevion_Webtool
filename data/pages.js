@@ -147,6 +147,10 @@ const pageContent = {
                 value: "/backup_logs/MAIN/"
               },
               {
+                label: "Service Log",
+                value: "/backup_logs/SERVICE_PM/"
+              },
+              {
                 label: "Daily Data",
                 value: "/home/mevion/Desktop/daily test/"
               },

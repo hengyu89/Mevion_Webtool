@@ -1,8 +1,16 @@
 /* global copyPlainText */
 
 const dailyReadingsState = {
-  snapshots: []
+  snapshots: [],
+  selectedDate: "",
+  sourceKind: ""
 };
+
+const DAILY_READING_LOG_PATHS = Object.freeze([
+  { label: "新 TC Logs", value: "/opt/mevion/apps/2.9.1R5_PRODUCTION/logs/" },
+  { label: "旧 TC Logs", value: "/backup_logs/MAIN/" },
+  { label: "Service Log", value: "/backup_logs/SERVICE_PM/" }
+]);
 
 const DAILY_READING_FIELDS = Object.freeze([
   { key: "heliumLevel", label: "Helium Level (%)", pattern: /^He Level:\s*([-+\d.eE]+)%/i, format: "fixed2" },
@@ -34,13 +42,25 @@ function initDailyReadingsToolPage() {
   if (!root || root.dataset.initialized === "true") return;
   root.dataset.initialized = "true";
   dailyReadingsState.snapshots = [];
+  dailyReadingsState.selectedDate = "";
+  dailyReadingsState.sourceKind = "";
 
   root.innerHTML = `
     <div class="tool-block daily-readings-tool">
       <div id="dailyReadingsDropZone" class="file-drop-zone daily-readings-drop-zone">
         <input id="dailyReadingsFileInput" class="file-input-hidden" type="file" accept=".csv" multiple />
         <div class="file-drop-title">点击或拖拽文件到此处</div>
-        <div class="file-drop-subtitle">支持格式: .csv，可一次选择多个 TCLogger / HALO 文件；仅提取 05:00 SERVICE_PM 点检快照</div>
+        <div class="file-drop-subtitle">支持格式: .csv，可选择 TCLogger / HALO 或 Service Log；仅提取 05:00 SERVICE_PM 点检快照</div>
+      </div>
+      <div class="daily-readings-path-bar" aria-label="日志路径">
+        <strong>日志路径</strong>
+        ${DAILY_READING_LOG_PATHS.map((item) => `
+          <span class="daily-readings-path-item">
+            <b>${item.label}</b>
+            <code>${item.value}</code>
+            <button class="daily-reading-copy daily-readings-path-copy" type="button" data-log-path="${item.value}" title="复制 ${item.label} 路径" aria-label="复制 ${item.label} 路径">⧉</button>
+          </span>
+        `).join("")}
       </div>
       <div id="dailyReadingsFileStatus" class="tool-file-list empty-text">尚未选择文件。</div>
       <div id="dailyReadingsResults" class="daily-readings-results"></div>
@@ -86,6 +106,10 @@ function bindDailyReadingsEvents() {
       });
       if (!isCurrent()) return;
       dailyReadingsState.snapshots = snapshots;
+      dailyReadingsState.selectedDate = snapshots.at(-1)?.date || "";
+      dailyReadingsState.sourceKind = files.some((file) => /service\s*log/i.test(String(file.name || ""))) || snapshots.length > 1
+        ? "Service Log"
+        : "TC Log";
       renderDailyReadingsResults();
 
       if (!snapshots.length) {
@@ -94,12 +118,18 @@ function bindDailyReadingsEvents() {
       }
       const found = snapshots.reduce((sum, snapshot) => sum + Object.keys(snapshot.values).length, 0);
       const expected = snapshots.length * DAILY_READING_FIELDS.length;
-      const type = found === expected ? "done" : "error";
-      setStatus(`共 ${files.length} 份文件，找到 ${snapshots.length} 天点检；已提取 ${found}/${expected} 项。`, type);
+      const incompleteDays = snapshots.filter(
+        (snapshot) => Object.keys(snapshot.values).length < DAILY_READING_FIELDS.length
+      ).length;
+      const type = snapshots.length > 1 || found === expected ? "done" : "error";
+      const incompleteMessage = incompleteDays ? `；${incompleteDays} 天存在缺项` : "";
+      setStatus(`${dailyReadingsState.sourceKind} · 共 ${files.length} 份文件，找到 ${snapshots.length} 天点检；已提取 ${found}/${expected} 项${incompleteMessage}。`, type);
     } catch (error) {
       if (!isCurrent()) return;
       loadedFileKey = "";
       dailyReadingsState.snapshots = [];
+      dailyReadingsState.selectedDate = "";
+      dailyReadingsState.sourceKind = "";
       renderDailyReadingsResults();
       console.error(error);
       setStatus(`分析失败：${error.message}`, "error");
@@ -127,6 +157,9 @@ function bindDailyReadingsEvents() {
   }
 
   window.activateDailyReadingsToolPage = loadSharedFilesIfNeeded;
+  document.querySelectorAll(".daily-readings-path-copy").forEach((button) => {
+    button.addEventListener("click", () => indicateDailyReadingsCopy(button, button.dataset.logPath || ""));
+  });
   dropZone.addEventListener("click", () => fileInput.click());
   fileInput.addEventListener("change", (event) => setFiles(event.target.files));
   dropZone.addEventListener("dragover", (event) => {
@@ -232,9 +265,14 @@ function renderDailyReadingsResults() {
     return;
   }
 
-  root.innerHTML = snapshots.map((snapshot, snapshotIndex) => {
-    const completed = DAILY_READING_FIELDS.filter((field) => snapshot.values[field.key]).length;
-    return `
+  let snapshotIndex = snapshots.findIndex((snapshot) => snapshot.date === dailyReadingsState.selectedDate);
+  if (snapshotIndex < 0) snapshotIndex = snapshots.length - 1;
+  const snapshot = snapshots[snapshotIndex];
+  dailyReadingsState.selectedDate = snapshot.date;
+  const completed = DAILY_READING_FIELDS.filter((field) => snapshot.values[field.key]).length;
+
+  root.innerHTML = `
+    ${snapshots.length > 1 ? renderDailyReadingsDatePicker(snapshots, snapshotIndex) : ""}
       <section class="daily-readings-card">
         <div class="daily-readings-card-header">
           <strong>${escapeDailyReadingsHtml(snapshot.date)} · 05:00 点检</strong>
@@ -248,8 +286,24 @@ function renderDailyReadingsResults() {
           </table>
         </div>
       </section>
-    `;
-  }).join("");
+  `;
+
+  const dateSelect = root.querySelector("#dailyReadingsDateSelect");
+  if (dateSelect) {
+    dateSelect.addEventListener("change", () => {
+      dailyReadingsState.selectedDate = dateSelect.value;
+      renderDailyReadingsResults();
+    });
+  }
+  root.querySelectorAll("button[data-date-step]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const currentIndex = snapshots.findIndex((item) => item.date === dailyReadingsState.selectedDate);
+      const nextIndex = currentIndex + Number(button.dataset.dateStep);
+      if (nextIndex < 0 || nextIndex >= snapshots.length) return;
+      dailyReadingsState.selectedDate = snapshots[nextIndex].date;
+      renderDailyReadingsResults();
+    });
+  });
 
   root.querySelectorAll("button[data-reading-key]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -260,6 +314,21 @@ function renderDailyReadingsResults() {
       await indicateDailyReadingsCopy(button, formatDailyReadingDisplayValue(field, reading));
     });
   });
+}
+
+function renderDailyReadingsDatePicker(snapshots, selectedIndex) {
+  const descending = snapshots.map((snapshot) => snapshot.date).reverse();
+  return `
+    <div class="daily-readings-date-picker">
+      <span class="daily-readings-source-chip">Service Log · ${snapshots.length} 天</span>
+      <button type="button" data-date-step="-1" ${selectedIndex <= 0 ? "disabled" : ""}>‹ 前一天</button>
+      <label for="dailyReadingsDateSelect">点检日期</label>
+      <select id="dailyReadingsDateSelect">
+        ${descending.map((date) => `<option value="${date}" ${date === dailyReadingsState.selectedDate ? "selected" : ""}>${date}</option>`).join("")}
+      </select>
+      <button type="button" data-date-step="1" ${selectedIndex >= snapshots.length - 1 ? "disabled" : ""}>后一天 ›</button>
+    </div>
+  `;
 }
 
 function renderDailyReadingRow(field, reading, snapshotIndex) {

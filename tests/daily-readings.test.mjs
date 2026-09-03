@@ -78,3 +78,18 @@ test("Daily Readings finds the earliest rollover file when later selected logs h
   assert.equal(snapshots[0].sourceFiles[0], "TCLogger.12-29-51.csv");
   assert.equal(Object.keys(snapshots[0].values).length, 15);
 });
+
+test("Daily Readings returns every available Service Log date in chronological order", async () => {
+  const dayOne = messages.map((message) => row(message));
+  const dayTwo = messages.map((message) => {
+    const cells = row(message);
+    cells[0] = cells[0].replace("2026-09-01", "2026-09-02");
+    return cells;
+  });
+  const snapshots = await context.parseDailyReadingsFiles([
+    file(csv([...dayTwo, ...dayOne]), "TONGJI-S250i-0013-ServiceLog.csv")
+  ]);
+  assert.deepEqual(Array.from(snapshots, (snapshot) => snapshot.date), ["2026-09-01", "2026-09-02"]);
+  assert.equal(Object.keys(snapshots[0].values).length, 15);
+  assert.equal(Object.keys(snapshots[1].values).length, 15);
+});
